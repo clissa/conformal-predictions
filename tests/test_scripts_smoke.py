@@ -90,6 +90,64 @@ def test_generate_experiments_command_smoke(tmp_path, monkeypatch):
     assert len(generated_files) == 1
 
 
+def test_generate_single_smoke(tmp_path, monkeypatch):
+    """generate.py with --n-experiments 1 (single-experiment mode)."""
+    module = _load_script_module(
+        "script_generate_single_smoke",
+        SCRIPTS_DIR / "generate.py",
+    )
+
+    output_dir = tmp_path / "gen_single"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate.py",
+            "--config",
+            str(ROOT / "configs" / "toy_default_easy.yaml"),
+            "--outdir",
+            str(output_dir),
+            "--n-experiments",
+            "1",
+        ],
+    )
+
+    module.main()
+
+    generated_files = list((output_dir / "mu=1.0").glob("experiment_*.npz"))
+    assert len(generated_files) == 1
+
+
+def test_generate_batch_smoke(tmp_path, monkeypatch):
+    """generate.py with --n-experiments > 1 (batch mode)."""
+    module = _load_script_module(
+        "script_generate_batch_smoke",
+        SCRIPTS_DIR / "generate.py",
+    )
+
+    output_dir = tmp_path / "gen_batch"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate.py",
+            "--config",
+            str(ROOT / "configs" / "toy_default_easy.yaml"),
+            "--outdir",
+            str(output_dir),
+            "--n-experiments",
+            "3",
+            "--n-workers",
+            "1",
+        ],
+    )
+
+    module.main()
+
+    generated_files = list((output_dir / "mu=1.0").glob("experiment_*.npz"))
+    assert len(generated_files) == 3
+
+
 def test_train_command_smoke(tmp_path, monkeypatch):
     module = _load_script_module(
         "script_train_smoke",
