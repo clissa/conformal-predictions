@@ -19,6 +19,7 @@ from conformal_predictions.data_viz import (
     plot_nonconformity_scores,
 )
 from conformal_predictions.models import build_models, fit_models
+from conformal_predictions.reference import get_model_efficiencies
 from conformal_predictions.training import (
     compute_confidence_interval,
     compute_mu_hat,
@@ -259,19 +260,7 @@ def load_test(
     return test_data
 
 
-def get_model_efficiencies(model, X_ref, y_ref, cfg: Settings) -> Tuple[float, float]:
-    y_pred = (model.predict_proba(X_ref)[:, 1] > cfg.threshold).astype(int)
-
-    gamma_raw = np.sum(y_pred * (y_ref == 1))  # true positives
-    beta_raw = np.sum(y_pred * (y_ref == 0))  # false positives
-
-    n_signal = np.sum(y_ref == 1)
-    n_background = np.sum(y_ref == 0)
-
-    eps_signal = gamma_raw / n_signal if n_signal > 0 else 0.0
-    eps_background = beta_raw / n_background if n_background > 0 else 0.0
-
-    return eps_signal, eps_background
+# get_model_efficiencies moved to conformal_predictions.reference
 
 
 def main() -> None:
