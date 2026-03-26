@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import Any, Dict, Tuple
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
+import yaml
 from joblib import Parallel, delayed
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -31,24 +33,16 @@ from conformal_predictions.training import (
     inference_on_test_set,
 )
 
-# TODO: Refactor to support yaml config loading. It should take Settings attributes + initial configs. Do not change parts/names that are not necessary for this.
-
-### MANUAL CHANGE THIS BEFORE RUNNING: ###
 HOW = "abs"  # method for computing nonconformity scores: "diff" or "abs"
 FIT_PARALLEL = False  # whether to fit models in parallel using joblib
 PRED_FORMULA = r"$\hat{\mu} = \frac{n_{pred} - \epsilon_{bkg}\beta^*_{true}}{\epsilon_{sig}\gamma^*_{true}}$"  # should match training._compute_mu_hat logic; used in plot_mu_hat_distribution titles
-# OUTPUT_DIRNAME = "test-bugfix"
-# OUTPUT_DIRNAME = "higgs-sequential-q16q84-10train-10valid-10ref-10calib-10test"
 OUTPUT_DIRNAME = "higgs-sequential-q68-10train-10valid-10ref-10calib-10test"
-### END OF MANUAL CONFIGURATION     ###
 
 PLOTS_DIR = Path("results") / OUTPUT_DIRNAME / "plots"
 PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
 STATS_DIR = Path("results") / OUTPUT_DIRNAME / "stats"
 STATS_DIR.mkdir(parents=True, exist_ok=True)
-
-# TODO: Refactor to support yaml config loading. It should take Settings attributes + OUTPUT_DIRNAME. Do not change parts/names that are not necessary for this.
 
 
 @dataclass(frozen=True)
@@ -67,6 +61,52 @@ class Settings:
     block_size: int = (
         10_000  # number of test pseudo-experiments to select if no prefixes match
     )
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Train conformal prediction models on the Higgs ML dataset."
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="Path to a YAML config file. Overrides default Settings and top-level constants.",
+    )
+    args, _ = parser.parse_known_args()
+    return args
+
+
+def _load_config(config_path: Path) -> Tuple[Settings, str, str, bool]:
+    """Load Settings and top-level constants from a YAML config file.
+
+    Args:
+        config_path: Path to the YAML configuration file.
+
+    Returns:
+        Tuple of (Settings instance, output_dirname, how, fit_parallel).
+    """
+    with open(config_path) as f:
+        raw = yaml.safe_load(f)
+
+    output_dirname: str = raw.get("output_dirname", OUTPUT_DIRNAME)
+    how: str = raw.get("how", HOW)
+    fit_parallel: bool = bool(raw.get("fit_parallel", FIT_PARALLEL))
+
+    cfg = Settings(
+        data_dir=Path(raw["data_dir"]) if "data_dir" in raw else Settings.data_dir,
+        mu=float(raw.get("mu", Settings.mu)),
+        seed=int(raw.get("seed", Settings.seed)),
+        threshold=float(raw.get("threshold", Settings.threshold)),
+        train_size=int(raw.get("train_size", Settings.train_size)),
+        valid_size=int(raw.get("valid_size", Settings.valid_size)),
+        ref_size=int(raw.get("ref_size", Settings.ref_size)),
+        calib_size=int(raw.get("calib_size", Settings.calib_size)),
+        test_size=int(raw.get("test_size", Settings.test_size)),
+        nonconf_target=str(raw.get("nonconf_target", Settings.nonconf_target)),
+        block_size=int(raw.get("block_size", Settings.block_size)),
+    )
+    return cfg, output_dirname, how, fit_parallel
 
 
 def load_trainval(
@@ -306,11 +346,26 @@ def get_model_efficiencies(model, X_ref, y_ref, cfg: Settings) -> Tuple[float, f
 
 
 def main() -> None:
+    global OUTPUT_DIRNAME, PLOTS_DIR, STATS_DIR, HOW, FIT_PARALLEL
+
+    args = _parse_args()
+    if args.config is not None:
+        cfg, new_output_dirname, new_how, new_fit_parallel = _load_config(args.config)
+        HOW = new_how
+        FIT_PARALLEL = new_fit_parallel
+        if new_output_dirname != OUTPUT_DIRNAME:
+            OUTPUT_DIRNAME = new_output_dirname
+            PLOTS_DIR = Path("results") / OUTPUT_DIRNAME / "plots"
+            PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+            STATS_DIR = Path("results") / OUTPUT_DIRNAME / "stats"
+            STATS_DIR.mkdir(parents=True, exist_ok=True)
+    else:
+        cfg = Settings()
+
     start_time = datetime.now()
     print(f"Script started at {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
     init_time = start_time
 
-    cfg = Settings()
     np.random.seed(cfg.seed)
 
     # STEP 1: Load data

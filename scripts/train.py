@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+import yaml
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
@@ -29,15 +31,12 @@ from conformal_predictions.training import (
     list_split_files,
 )
 
-# TODO: Refactor to support yaml config loading. It should take Settings attributes + OUTPUT_DIRNAME. Do not change parts/names that are not necessary for this.
 OUTPUT_DIRNAME = "test_toy-scale-easy-1000-test-2100-calib"
 PLOTS_DIR = Path("results") / OUTPUT_DIRNAME / "plots"
 PLOTS_DIR.mkdir(parents=True, exist_ok=True)
 
 STATS_DIR = Path("results") / OUTPUT_DIRNAME / "stats"
 STATS_DIR.mkdir(parents=True, exist_ok=True)
-
-# TODO: Refactor to support yaml config loading. It should take Settings attributes + OUTPUT_DIRNAME. Do not change parts/names that are not necessary for this.
 
 
 @dataclass(frozen=True)
@@ -53,6 +52,53 @@ class Settings:
     n_test_experiments: int = (
         1000  # number of test pseudo-experiments to select if no prefixes match
     )
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Train conformal prediction models on toy pseudo-experiments."
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="Path to a YAML config file. Overrides default Settings and output_dirname.",
+    )
+    args, _ = parser.parse_known_args()
+    return args
+
+
+def _load_config(config_path: Path) -> Tuple[Settings, str]:
+    """Load Settings and output_dirname from a YAML config file.
+
+    Args:
+        config_path: Path to the YAML configuration file.
+
+    Returns:
+        Tuple of (Settings instance, output_dirname string).
+    """
+    with open(config_path) as f:
+        raw = yaml.safe_load(f)
+
+    output_dirname: str = raw.get("output_dirname", OUTPUT_DIRNAME)
+
+    test_prefixes_raw = raw.get("test_prefixes", list(Settings.test_prefixes))
+    test_prefixes: Tuple[str, ...] = tuple(test_prefixes_raw)
+
+    cfg = Settings(
+        data_dir=Path(raw["data_dir"]) if "data_dir" in raw else Settings.data_dir,
+        mu=float(raw.get("mu", Settings.mu)),
+        seed=int(raw.get("seed", Settings.seed)),
+        test_prefixes=test_prefixes,
+        threshold=float(raw.get("threshold", Settings.threshold)),
+        valid_size=float(raw.get("valid_size", Settings.valid_size)),
+        calib_size=float(raw.get("calib_size", Settings.calib_size)),
+        nonconf_target=str(raw.get("nonconf_target", Settings.nonconf_target)),
+        n_test_experiments=int(
+            raw.get("n_test_experiments", Settings.n_test_experiments)
+        ),
+    )
+    return cfg, output_dirname
 
 
 # TODO: Add more models and hyperparameter tuning: in particular, try probability regression VS classification.
@@ -87,7 +133,20 @@ def _fit_models(
 
 
 def main() -> None:
-    cfg = Settings()
+    global OUTPUT_DIRNAME, PLOTS_DIR, STATS_DIR
+
+    args = _parse_args()
+    if args.config is not None:
+        cfg, new_output_dirname = _load_config(args.config)
+        if new_output_dirname != OUTPUT_DIRNAME:
+            OUTPUT_DIRNAME = new_output_dirname
+            PLOTS_DIR = Path("results") / OUTPUT_DIRNAME / "plots"
+            PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+            STATS_DIR = Path("results") / OUTPUT_DIRNAME / "stats"
+            STATS_DIR.mkdir(parents=True, exist_ok=True)
+    else:
+        cfg = Settings()
+
     np.random.seed(cfg.seed)
 
     train_files, val_files, calib_files, test_files = list_split_files(
