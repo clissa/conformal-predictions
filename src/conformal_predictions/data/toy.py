@@ -4,7 +4,7 @@ import json
 import uuid
 from dataclasses import MISSING, dataclass, fields
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import yaml
@@ -474,3 +474,64 @@ def _meta_to_jsonable(meta: MetaDict) -> MetaDict:
     meta_copy = dict(meta)
     meta_copy.pop("weights", None)
     return convert(meta_copy)
+
+
+# ---------------------------------------------------------------------------
+# Split helpers  (moved from training.py in Step 6)
+# ---------------------------------------------------------------------------
+
+
+def _experiment_prefix(path: Path) -> str:
+    stem = path.stem
+    if stem.startswith("experiment_"):
+        stem = stem[len("experiment_") :]
+    return stem[:4]
+
+
+def list_split_files(
+    data_dir: Path,
+    mu: float,
+    test_prefixes: Optional[Sequence[str]],
+    n_test_experiments: Optional[int],
+    valid_size: float,
+    calib_size: float,
+    seed: int,
+) -> Tuple[List[Path], List[Path], List[Path], List[Path]]:
+    if valid_size < 0 or calib_size < 0 or valid_size + calib_size >= 1:
+        raise ValueError("valid_size and calib_size must be >= 0 and sum to < 1.")
+    mu_dir = data_dir / f"mu={mu}"
+    files = sorted(mu_dir.glob("*.npz"))
+    if not files:
+        raise FileNotFoundError(f"No .npz files found in {mu_dir}")
+    rng = np.random.default_rng(seed)
+    test_files: List[Path] = []
+    if test_prefixes:
+        test_files = [
+            path for path in files if _experiment_prefix(path) in test_prefixes
+        ]
+    if not test_files:
+        print(
+            "No test files found with the specified prefixes. Falling back to random files."
+        )
+        if not n_test_experiments:
+            raise ValueError("n_test_experiments must be set when no prefixes match.")
+        n_test = min(n_test_experiments, len(files))
+        test_files = list(rng.choice(files, size=n_test, replace=False))
+    remaining_files = [path for path in files if path not in test_files]
+    if not remaining_files:
+        raise ValueError("No files remain after test split.")
+    n_calib = int(np.floor(calib_size * len(remaining_files)))
+    calib_files: List[Path] = []
+    if n_calib > 0:
+        calib_files = list(rng.choice(remaining_files, size=n_calib, replace=False))
+    train_val_files = [path for path in remaining_files if path not in calib_files]
+    if not train_val_files:
+        raise ValueError("No files remain after calibration split.")
+    n_val = int(np.floor(valid_size * len(train_val_files)))
+    val_files: List[Path] = []
+    if n_val > 0:
+        val_files = list(rng.choice(train_val_files, size=n_val, replace=False))
+    train_files = [path for path in train_val_files if path not in val_files]
+    if not train_files:
+        raise ValueError("No training files remain after train/val split.")
+    return train_files, val_files, calib_files, test_files

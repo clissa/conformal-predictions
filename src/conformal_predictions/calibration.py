@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+from typing import Dict, List, Optional, Sequence, Tuple
+
+import numpy as np
+from scipy.stats import gaussian_kde
+from sklearn.preprocessing import StandardScaler
+from tqdm.auto import tqdm
+
+
+def _random_perturbation_for_numerical_stability() -> float:
+    return np.random.normal(0, 1e-6)
+
+
+def _nonconformity_scores(pred, target, how: str) -> float:
+    """Compute nonconformity score.
+    Args: how: diff (target - pred) or abs_diff (|target - pred|)"""
+    if how == "diff":
+        score = target - pred
+    elif how == "abs":
+        score = abs(target - pred)
+    else:
+        raise ValueError(f"Unknown how value: {how}")
+    return score + _random_perturbation_for_numerical_stability()
+
+
+def _get_proportionate_gamma_true(meta: dict) -> float:
+    return meta["gamma_true"] / meta["nu_expected"] * meta["n_total"]
+
+
+def _get_expected_signal(gamma_true: float, eps_signal: float) -> float:
+    return gamma_true * eps_signal
+
+
+def _get_proportionate_beta_true(meta: dict) -> float:
+    return meta["beta_true"] / meta["nu_expected"] * meta["n_total"]
+
+
+def _get_expected_background(beta_true: int, eps_background: float) -> float:
+    return beta_true * eps_background
+
+
+def _compute_mu_hat(
+    n_pred: int, meta: dict, ref_efficiencies: Sequence[float]
+) -> float:
+    gamma_true = _get_proportionate_gamma_true(meta)
+    beta_true = _get_proportionate_beta_true(meta)
+    expected_signal = _get_expected_signal(gamma_true, ref_efficiencies[0])
+    expected_background = _get_expected_background(beta_true, ref_efficiencies[1])
+    mu_hat = (
+        (n_pred - expected_background) / expected_signal if expected_signal > 0 else 0.0
+    )
+    return mu_hat
+
+
+def compute_nonconformity_scores(
+    models: Dict[str, object],
+    scaler: StandardScaler,
+    calib_data: Sequence[Tuple[np.ndarray, np.ndarray]],
+    calib_meta: Sequence[dict],
+    threshold: float,
+    *,
+    target: str = "mu_hat",  # can be "n_pred" or "mu_hat",
+    how: str,  # method for computing nonconformity scores: "diff" or "abs"
+    ref_efficiencies: Optional[Sequence[float]] = None,
+) -> Dict[str, List[int]]:
+    scores: Dict[str, List[int]] = {name: [] for name in models}
+    for (X_calib, y_calib), _meta in tqdm(
+        zip(calib_data, calib_meta),
+        total=len(calib_data),
+        desc="Computing nonconformity scores",
+    ):
+
+        X_calib = scaler.transform(X_calib)
+        for name, model in models.items():
+            y_pred_proba = model.predict_proba(X_calib)[:, 1]
+            n_pred = int(np.sum(y_pred_proba > threshold))
+            if target == "mu_hat":
+                mu_true = _meta["mu_true"]
+                mu_hat = _compute_mu_hat(n_pred, _meta, ref_efficiencies)
+                scores[name].append(_nonconformity_scores(mu_hat, mu_true, how=how))
+            elif target == "n_pred":
+                n_obs = int(np.sum(y_calib))
+                scores[name].append(_nonconformity_scores(n_pred, n_obs, how=how))
+    return scores
+
+
+def compute_mu_hat(
+    models: Dict[str, object],
+    scaler: StandardScaler,
+    calib_data: Sequence[Tuple[np.ndarray, np.ndarray]],
+    calib_meta: Sequence[dict],
+    threshold: float,
+    ref_efficiencies: Sequence[float],
+) -> Tuple[Dict[str, List[float]], Dict[str, Dict[str, float]]]:
+    mu_hat: Dict[str, List[float]] = {name: [] for name in models}
+    for (X_calib, y_calib), meta in zip(calib_data, calib_meta):
+        X_calib = scaler.transform(X_calib)
+        # gamma_true = _get_proportionate_gamma_true(meta)
+        if meta["gamma_true"] == 0:
+            continue
+        for name, model in models.items():
+            y_pred_proba = model.predict_proba(X_calib)[:, 1]
+            n_pred = int(np.sum(y_pred_proba > threshold))
+            mu_pred = _compute_mu_hat(n_pred, meta, ref_efficiencies)
+            mu_hat[name].append(mu_pred)
+
+    stats: Dict[str, Dict[str, float]] = {}
+    for name, values in mu_hat.items():
+        if len(values) > 0:
+            density = gaussian_kde(values)
+            xs = np.linspace(min(values), max(values), 1000)
+            density_vals = density(xs)
+            map_estimate = float(xs[np.argmax(density_vals)])
+
+            stats[name] = {
+                "q16": float(np.percentile(values, 16)),
+                "map": map_estimate,
+                "mu_median": float(np.median(values)),
+                "mu_mean": float(np.mean(values)),
+                "q68": float(np.percentile(values, 68)),
+                "q84": float(np.percentile(values, 84)),
+            }
+
+    return mu_hat, stats

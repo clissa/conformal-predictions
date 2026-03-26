@@ -12,22 +12,24 @@ import pyarrow.parquet as pq
 import yaml
 from sklearn.preprocessing import StandardScaler
 
+from conformal_predictions.calibration import (
+    compute_mu_hat,
+    compute_nonconformity_scores,
+)
 from conformal_predictions.data_viz import (
     contourplot_data,
     plot_confidence_intervals,
     plot_mu_hat_distribution,
     plot_nonconformity_scores,
 )
-from conformal_predictions.models import build_models, fit_models
-from conformal_predictions.reference import get_model_efficiencies
-from conformal_predictions.training import (
+from conformal_predictions.evaluation import (
     compute_confidence_interval,
-    compute_mu_hat,
-    compute_nonconformity_scores,
     evaluate_models,
     get_events_count,
     inference_on_test_set,
 )
+from conformal_predictions.models import build_models, fit_models
+from conformal_predictions.reference import get_model_efficiencies
 
 HOW = "abs"  # method for computing nonconformity scores: "diff" or "abs"
 FIT_PARALLEL = False  # whether to fit models in parallel using joblib

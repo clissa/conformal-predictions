@@ -10,23 +10,24 @@ import pandas as pd
 import yaml
 from sklearn.preprocessing import StandardScaler
 
-from conformal_predictions.data.toy import load_pseudo_experiment
+from conformal_predictions.calibration import (
+    compute_mu_hat,
+    compute_nonconformity_scores,
+)
+from conformal_predictions.data.toy import list_split_files, load_pseudo_experiment
 from conformal_predictions.data_viz import (
     contourplot_data,
     plot_confidence_intervals,
     plot_mu_hat_distribution,
     plot_nonconformity_scores,
 )
-from conformal_predictions.models import build_models, fit_models
-from conformal_predictions.training import (
+from conformal_predictions.evaluation import (
     compute_confidence_interval,
-    compute_mu_hat,
-    compute_nonconformity_scores,
     evaluate_models,
     get_events_count,
     inference_on_test_set,
-    list_split_files,
 )
+from conformal_predictions.models import build_models, fit_models
 
 OUTPUT_DIRNAME = "test_toy-scale-easy-1000-test-2100-calib"
 PLOTS_DIR = Path("results") / OUTPUT_DIRNAME / "plots"
@@ -201,7 +202,13 @@ def main() -> None:
     )
     print(f"\t...using {cfg.nonconf_target} as target for nonconformity scores")
     nonconf_scores = compute_nonconformity_scores(
-        models, scaler, calib_data, calib_meta, cfg.threshold, target=cfg.nonconf_target
+        models,
+        scaler,
+        calib_data,
+        calib_meta,
+        cfg.threshold,
+        target=cfg.nonconf_target,
+        how="diff",
     )
 
     for model_name, values in nonconf_scores.items():
@@ -259,12 +266,12 @@ def main() -> None:
     for model_name, mu_hat_values in mu_hat_test.items():
         if cfg.nonconf_target == "mu_hat":
             mu_hat_lower_bounds, mu_hat_upper_bounds = compute_confidence_interval(
-                np.array(mu_hat_values), nonconf_scores_file, model_name
+                np.array(mu_hat_values), nonconf_scores_file, model_name, how="diff"
             )
         elif cfg.nonconf_target == "n_pred":
             n_preds = mu_hat_values * np.array(gamma_true_list)
             n_lower, n_upper = compute_confidence_interval(
-                n_preds, nonconf_scores_file, model_name
+                n_preds, nonconf_scores_file, model_name, how="diff"
             )
             mu_hat_lower_bounds = n_lower / np.array(gamma_true_list)
             mu_hat_upper_bounds = n_upper / np.array(gamma_true_list)
