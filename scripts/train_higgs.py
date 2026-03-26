@@ -24,6 +24,7 @@ from conformal_predictions.data_viz import (
 )
 from conformal_predictions.evaluation import (
     compute_confidence_interval,
+    compute_empirical_coverage,
     evaluate_models,
     get_events_count,
     inference_on_test_set,
@@ -511,15 +512,8 @@ def main() -> None:
             mu_hat_lower_bounds = n_lower / np.array(gamma_true_list)
             mu_hat_upper_bounds = n_upper / np.array(gamma_true_list)
         print(f"\nModel: {model_name}\n")
-        empirical_coverage = np.mean(
-            [
-                mu_hat_lower < mu_true < mu_hat_upper
-                for mu_hat_lower, mu_hat_upper, mu_true in zip(
-                    mu_hat_lower_bounds,
-                    mu_hat_upper_bounds,
-                    mu_true_list,
-                )
-            ]
+        empirical_coverage = compute_empirical_coverage(
+            mu_hat_lower_bounds, mu_hat_upper_bounds, mu_true_list
         )
         print(f"Empirical coverage: {empirical_coverage*100:.2f}%")
         plot_confidence_intervals(

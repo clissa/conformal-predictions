@@ -34,6 +34,7 @@ from conformal_predictions.data.toy import (  # noqa: F401, E402
 # Re-export evaluation API
 from conformal_predictions.evaluation import (  # noqa: F401, E402
     compute_confidence_interval,
+    compute_empirical_coverage,
     evaluate_models,
     get_events_count,
     inference_on_test_set,

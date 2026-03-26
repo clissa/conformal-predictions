@@ -167,3 +167,28 @@ def compute_confidence_interval(
     upper_bound = y_pred + q_high
 
     return lower_bound, upper_bound
+
+
+def compute_empirical_coverage(
+    lower_bounds: np.ndarray,
+    upper_bounds: np.ndarray,
+    true_values: Sequence[float],
+) -> float:
+    """Fraction of experiments where the true value falls within the CI.
+
+    Args:
+        lower_bounds: Lower CI bounds (one per experiment).
+        upper_bounds: Upper CI bounds (one per experiment).
+        true_values: True parameter values (one per experiment).
+
+    Returns:
+        Empirical coverage in [0, 1].
+    """
+    return float(
+        np.mean(
+            [
+                lo < mu < hi
+                for lo, hi, mu in zip(lower_bounds, upper_bounds, true_values)
+            ]
+        )
+    )
