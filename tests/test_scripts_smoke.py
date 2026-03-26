@@ -188,6 +188,152 @@ def test_train_command_smoke(tmp_path, monkeypatch):
     assert (stats_dir / "mu_hat_calibration_stats.csv").exists()
 
 
+def test_train_load_config(tmp_path):
+    """Verify that _load_config correctly parses a YAML file for train.py."""
+    module = _load_script_module(
+        "script_train_load_config",
+        SCRIPTS_DIR / "train.py",
+    )
+
+    yaml_content = """\
+output_dirname: "custom-output"
+data_dir: "data/custom_dir"
+mu: 2.0
+seed: 99
+test_prefixes:
+  - "aaaa"
+  - "bbbb"
+valid_size: 0.1
+calib_size: 0.3
+nonconf_target: "n_pred"
+n_test_experiments: 500
+threshold: 0.7
+"""
+    config_path = tmp_path / "train_config.yaml"
+    config_path.write_text(yaml_content)
+
+    cfg, output_dirname = module._load_config(config_path)
+
+    assert output_dirname == "custom-output"
+    assert str(cfg.data_dir) == "data/custom_dir"
+    assert cfg.mu == 2.0
+    assert cfg.seed == 99
+    assert cfg.test_prefixes == ("aaaa", "bbbb")
+    assert cfg.valid_size == 0.1
+    assert cfg.calib_size == 0.3
+    assert cfg.nonconf_target == "n_pred"
+    assert cfg.n_test_experiments == 500
+    assert cfg.threshold == 0.7
+
+
+def test_train_command_smoke_with_config(tmp_path, monkeypatch):
+    """Verify that main() in train.py correctly loads settings from a YAML config."""
+    module = _load_script_module(
+        "script_train_smoke_with_config",
+        SCRIPTS_DIR / "train.py",
+    )
+
+    yaml_content = """\
+output_dirname: "custom-output-for-test"
+data_dir: "data/toy_scale_easy"
+mu: 1.0
+seed: 18
+test_prefixes:
+  - "7e39"
+  - "6fcb"
+valid_size: 0.2
+calib_size: 0.5
+nonconf_target: "mu_hat"
+n_test_experiments: 1000
+threshold: 0.5
+"""
+    config_path = tmp_path / "train_config.yaml"
+    config_path.write_text(yaml_content)
+
+    # Change CWD to tmp_path so output dirs are created under tmp_path/results/...
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["train.py", "--config", str(config_path)],
+    )
+
+    train_file = tmp_path / "train.npz"
+    val_file = tmp_path / "val.npz"
+    calib_file = tmp_path / "calib.npz"
+    test_file = tmp_path / "test.npz"
+
+    monkeypatch.setattr(
+        module,
+        "list_split_files",
+        lambda *_args, **_kwargs: (
+            [train_file],
+            [val_file],
+            [calib_file],
+            [test_file],
+        ),
+    )
+    monkeypatch.setattr(module, "load_pseudo_experiment", _fake_load_pseudo_experiment)
+    monkeypatch.setattr(module, "contourplot_data", lambda *_a, **_k: None)
+    monkeypatch.setattr(module, "plot_nonconformity_scores", lambda *_a, **_k: None)
+    monkeypatch.setattr(module, "plot_mu_hat_distribution", lambda *_a, **_k: None)
+    monkeypatch.setattr(module, "plot_confidence_intervals", lambda *_a, **_k: None)
+    monkeypatch.setattr(module, "_build_models", lambda _seed: {"Dummy": _DummyModel()})
+    monkeypatch.setattr(module, "_fit_models", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        module,
+        "evaluate_models",
+        lambda *_a, **_k: {
+            "Dummy": {"accuracy": 1.0, "precision": 1.0, "recall": 1.0, "f1": 1.0}
+        },
+    )
+    monkeypatch.setattr(
+        module, "get_events_count", lambda *_a, **_k: {"Dummy": 1}
+    )
+    monkeypatch.setattr(
+        module,
+        "compute_nonconformity_scores",
+        lambda *_a, **_k: {"Dummy": [0.1, 0.2]},
+    )
+    monkeypatch.setattr(
+        module,
+        "compute_mu_hat",
+        lambda *_a, **_k: (
+            {"Dummy": [1.0, 1.1]},
+            {
+                "Dummy": {
+                    "q16": 0.9,
+                    "map": 1.0,
+                    "mu_median": 1.0,
+                    "mu_mean": 1.05,
+                    "q68": 1.1,
+                    "q84": 1.2,
+                }
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "inference_on_test_set",
+        lambda *_a, **_k: (
+            {"Dummy": [1.0]},
+            [1.0],
+            [10.0],
+            {"Dummy": [{"accuracy": 1.0}]},
+        ),
+    )
+    monkeypatch.setattr(
+        module, "compute_confidence_interval", _fake_confidence_interval
+    )
+
+    module.main()
+
+    stats_dir = tmp_path / "results" / "custom-output-for-test" / "stats"
+    assert (stats_dir / "mu_hat_calib_distribution.npz").exists()
+    assert (stats_dir / "mu_hat_nonconf_scores.npz").exists()
+    assert (stats_dir / "mu_hat_calibration_stats.csv").exists()
+
+
 def test_train_higgs_command_smoke(tmp_path, monkeypatch):
     module = _load_script_module(
         "script_train_higgs_smoke",
