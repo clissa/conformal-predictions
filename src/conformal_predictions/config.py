@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import yaml
 
@@ -31,6 +31,9 @@ class PipelineConfig:
     ref_size: Optional[float] = None
     test_size: Optional[float] = None
     block_size: Optional[int] = None
+
+    # --- model hyperparameters ------------------------------------------
+    model_hyperparams: Optional[Dict[str, Dict[str, Any]]] = None
 
     # --- toy-specific --------------------------------------------------
     n_test_experiments: Optional[int] = None
@@ -66,5 +69,12 @@ def load_config(path: str | Path) -> PipelineConfig:
     # Convert test_prefixes list to tuple
     if "test_prefixes" in raw and raw["test_prefixes"] is not None:
         raw["test_prefixes"] = tuple(raw["test_prefixes"])
+
+    # Convert list values in model_hyperparams to tuples where needed
+    if "model_hyperparams" in raw and raw["model_hyperparams"] is not None:
+        for model_name, params in raw["model_hyperparams"].items():
+            for key, value in params.items():
+                if isinstance(value, list):
+                    params[key] = tuple(value)
 
     return PipelineConfig(**raw)

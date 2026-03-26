@@ -125,8 +125,8 @@ def test_train_command_smoke(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "plot_mu_hat_distribution", lambda *_a, **_k: None)
     monkeypatch.setattr(module, "plot_confidence_intervals", lambda *_a, **_k: None)
 
-    monkeypatch.setattr(module, "_build_models", lambda _seed: {"Dummy": _DummyModel()})
-    monkeypatch.setattr(module, "_fit_models", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(module, "build_models", lambda _cfg: {"Dummy": _DummyModel()})
+    monkeypatch.setattr(module, "fit_models", lambda *_args, **_kwargs: None)
 
     monkeypatch.setattr(
         module,
@@ -278,8 +278,8 @@ threshold: 0.5
     monkeypatch.setattr(module, "plot_nonconformity_scores", lambda *_a, **_k: None)
     monkeypatch.setattr(module, "plot_mu_hat_distribution", lambda *_a, **_k: None)
     monkeypatch.setattr(module, "plot_confidence_intervals", lambda *_a, **_k: None)
-    monkeypatch.setattr(module, "_build_models", lambda _seed: {"Dummy": _DummyModel()})
-    monkeypatch.setattr(module, "_fit_models", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(module, "build_models", lambda _cfg: {"Dummy": _DummyModel()})
+    monkeypatch.setattr(module, "fit_models", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         module,
         "evaluate_models",
@@ -287,9 +287,7 @@ threshold: 0.5
             "Dummy": {"accuracy": 1.0, "precision": 1.0, "recall": 1.0, "f1": 1.0}
         },
     )
-    monkeypatch.setattr(
-        module, "get_events_count", lambda *_a, **_k: {"Dummy": 1}
-    )
+    monkeypatch.setattr(module, "get_events_count", lambda *_a, **_k: {"Dummy": 1})
     monkeypatch.setattr(
         module,
         "compute_nonconformity_scores",
@@ -393,11 +391,10 @@ def test_train_higgs_command_smoke(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         module,
-        "_build_models",
-        lambda _seed, n_jobs: {"Dummy": _DummyModel()},
+        "build_models",
+        lambda _cfg, n_jobs: {"Dummy": _DummyModel()},
     )
-    monkeypatch.setattr(module, "_fit_models", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(module, "fit_models_parallel", lambda *_a, **_k: None)
+    monkeypatch.setattr(module, "fit_models", lambda *_args, **_kwargs: None)
 
     monkeypatch.setattr(
         module,

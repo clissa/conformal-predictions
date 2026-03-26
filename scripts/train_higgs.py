@@ -4,19 +4,13 @@ import argparse
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Tuple
 
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 import yaml
-from joblib import Parallel, delayed
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
-from threadpoolctl import threadpool_limits
-from tqdm.auto import tqdm
 
 from conformal_predictions.data_viz import (
     contourplot_data,
@@ -24,6 +18,7 @@ from conformal_predictions.data_viz import (
     plot_mu_hat_distribution,
     plot_nonconformity_scores,
 )
+from conformal_predictions.models import build_models, fit_models
 from conformal_predictions.training import (
     compute_confidence_interval,
     compute_mu_hat,
@@ -264,72 +259,6 @@ def load_test(
     return test_data
 
 
-# TODO: Add more models and hyperparameter tuning: in particular, try probability regression VS classification.
-def _build_models(seed: int, n_jobs: int) -> Dict[str, object]:
-    return {
-        "GLM": LogisticRegression(
-            penalty="l2",
-            solver="lbfgs",
-            max_iter=1000,
-            random_state=seed,
-        ),
-        "Random Forest": RandomForestClassifier(
-            n_estimators=50,
-            criterion="gini",
-            n_jobs=n_jobs,
-            random_state=seed,
-        ),
-        "MLP": MLPClassifier(
-            hidden_layer_sizes=(32, 16),
-            activation="relu",
-            max_iter=1000,
-            random_state=seed,
-        ),
-    }
-
-
-def _fit_one(name: str, model: Any, X, y) -> Tuple[str, Any]:
-    model.fit(X, y)
-    return name, model
-
-
-def _fit_models(
-    models: Dict[str, object], X_train: np.ndarray, y_train: np.ndarray
-) -> None:
-    for model in tqdm(models.values(), desc="Training models"):
-        _ = _fit_one("", model, X_train, y_train)
-
-
-def fit_models_parallel(
-    models: Dict[str, Any],
-    X_train,
-    y_train,
-    *,
-    n_jobs: int = -1,
-    prefer_threads: bool = False,
-    memmap_threshold: str = "200M",
-    blas_threads: int = 1,
-) -> None:
-    for model in models.values():
-        if hasattr(model, "n_jobs"):
-            model.n_jobs = 1
-
-    backend = "threading" if prefer_threads else "loky"
-    items = list(models.items())
-
-    with threadpool_limits(limits=blas_threads):
-        results = Parallel(
-            n_jobs=n_jobs,
-            backend=backend,
-            max_nbytes=memmap_threshold,
-        )(
-            delayed(_fit_one)(name, model, X_train, y_train)
-            for name, model in tqdm(items, desc=f"Training models ({backend})")
-        )
-
-    models.update(dict(results))
-
-
 def get_model_efficiencies(model, X_ref, y_ref, cfg: Settings) -> Tuple[float, float]:
     y_pred = (model.predict_proba(X_ref)[:, 1] > cfg.threshold).astype(int)
 
@@ -423,14 +352,16 @@ def main() -> None:
     # STEP 2: Train models
     step_start = datetime.now()
     print("\n[Model training...]")
-    if FIT_PARALLEL:
-        models = _build_models(cfg.seed, n_jobs=1)
-        fit_models_parallel(
-            models, X_train_scaled, y_train, n_jobs=-1, memmap_threshold="200M"
-        )
-    else:
-        models = _build_models(cfg.seed, n_jobs=-1)
-        _fit_models(models, X_train_scaled, y_train)
+    n_jobs_model = 1 if FIT_PARALLEL else -1
+    models = build_models(cfg, n_jobs=n_jobs_model)
+    fit_models(
+        models,
+        X_train_scaled,
+        y_train,
+        parallel=FIT_PARALLEL,
+        n_jobs=-1,
+        memmap_threshold="200M",
+    )
     step_duration = (datetime.now() - step_start).total_seconds()
     print(
         f"Model training completed in {int(step_duration // 3600):02d}:{int((step_duration % 3600) // 60):02d}:{int(step_duration % 60):02d}"

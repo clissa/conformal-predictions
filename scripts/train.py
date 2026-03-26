@@ -3,16 +3,12 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
 import yaml
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
-from tqdm.auto import tqdm
 
 from conformal_predictions.data.toy import load_pseudo_experiment
 from conformal_predictions.data_viz import (
@@ -21,6 +17,7 @@ from conformal_predictions.data_viz import (
     plot_mu_hat_distribution,
     plot_nonconformity_scores,
 )
+from conformal_predictions.models import build_models, fit_models
 from conformal_predictions.training import (
     compute_confidence_interval,
     compute_mu_hat,
@@ -101,37 +98,6 @@ def _load_config(config_path: Path) -> Tuple[Settings, str]:
     return cfg, output_dirname
 
 
-# TODO: Add more models and hyperparameter tuning: in particular, try probability regression VS classification.
-def _build_models(seed: int) -> Dict[str, object]:
-    return {
-        "GLM": LogisticRegression(
-            penalty="l2",
-            solver="lbfgs",
-            max_iter=1000,
-            random_state=seed,
-        ),
-        "Random Forest": RandomForestClassifier(
-            n_estimators=50,
-            criterion="gini",
-            n_jobs=-1,
-            random_state=seed,
-        ),
-        "MLP": MLPClassifier(
-            hidden_layer_sizes=(32, 16),
-            activation="relu",
-            max_iter=1000,
-            random_state=seed,
-        ),
-    }
-
-
-def _fit_models(
-    models: Dict[str, object], X_train: np.ndarray, y_train: np.ndarray
-) -> None:
-    for model in tqdm(models.values(), desc="Training models"):
-        model.fit(X_train, y_train)
-
-
 def main() -> None:
     global OUTPUT_DIRNAME, PLOTS_DIR, STATS_DIR
 
@@ -206,8 +172,8 @@ def main() -> None:
 
     contourplot_data(X_val, y_val, output_dir=PLOTS_DIR)
 
-    models = _build_models(cfg.seed)
-    _fit_models(models, X_train_scaled, y_train)
+    models = build_models(cfg)
+    fit_models(models, X_train_scaled, y_train)
 
     # print classification performance on validation set
     performance_metrics = evaluate_models(models, X_val_scaled, y_val)
