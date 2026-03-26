@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Sequence, Tuple
 
 import joblib
 import numpy as np
@@ -42,6 +42,7 @@ _MODEL_CLASSES: Dict[str, type] = {
 def build_models(
     config: PipelineConfig,
     *,
+    model_names: Sequence[str] | None = None,
     n_jobs: int = -1,
 ) -> Dict[str, Any]:
     """Instantiate (unfitted) models according to *config*.
@@ -52,6 +53,11 @@ def build_models(
         Pipeline configuration.  ``config.seed`` is used for
         reproducibility and ``config.model_hyperparams`` (if set)
         overrides the default hyperparameters per model.
+    model_names : sequence of str, optional
+        If given, only build models whose names appear in this sequence.
+        Names must match keys in ``_MODEL_CLASSES`` (e.g. ``"GLM"``,
+        ``"Random Forest"``, ``"MLP"``).  When *None* (default), all
+        available models are built.
     n_jobs : int, optional
         Number of parallel jobs for models that support it (e.g.
         ``RandomForestClassifier``).  When fitting in parallel via
@@ -64,8 +70,13 @@ def build_models(
         Mapping of model name → unfitted sklearn estimator.
     """
     hyperparams = getattr(config, "model_hyperparams", None) or _DEFAULT_HYPERPARAMS
+    selected = (
+        _MODEL_CLASSES.items()
+        if model_names is None
+        else [(n, c) for n, c in _MODEL_CLASSES.items() if n in model_names]
+    )
     models: Dict[str, Any] = {}
-    for name, cls in _MODEL_CLASSES.items():
+    for name, cls in selected:
         params = dict(hyperparams.get(name, {}))
         params["random_state"] = config.seed
         if name == "Random Forest":
