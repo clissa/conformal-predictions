@@ -1,0 +1,18 @@
+# HiggsML pipeline configuration
+data_source: higgs
+data_dir: data/HiggsML/input_data/train
+mu: 1.0
+seed: 18
+threshold: 0.5
+how: abs                        # "diff" or "abs"
+nonconf_target: mu_hat          # "mu_hat" or "n_pred"
+output_dir: higgs-sequential-q68-10train-10valid-10ref-10calib-10test
+fit_parallel: false
+valid_size: 10
+calib_size: 10
+
+# higgs-specific
+train_size: 10
+ref_size: 10
+test_size: 10
+block_size: 10000

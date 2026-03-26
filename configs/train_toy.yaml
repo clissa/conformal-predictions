@@ -1,0 +1,18 @@
+# Toy pipeline configuration
+data_source: toy
+data_dir: data/toy_scale_easy
+mu: 1.0
+seed: 18
+threshold: 0.5
+how: abs
+nonconf_target: mu_hat         # "mu_hat" or "n_pred"
+output_dir: test_toy-scale-easy-1000-test-2100-calib
+fit_parallel: false
+valid_size: 0.2
+calib_size: 0.5
+
+# toy-specific
+n_test_experiments: 1000
+test_prefixes:
+  - "7e39"
+  - "6fcb"
