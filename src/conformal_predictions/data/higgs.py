@@ -120,16 +120,21 @@ def load_ref(
 
 def load_calib(
     config: PipelineConfig,
-    calib_start_label_idx: int,
+    calib_start_label_idx: int | None = None,
 ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], List[Dict[str, Any]]]:
     """Load calibration blocks from HiggsML data.
+
+    Calibration row groups are located immediately after train + validation +
+    reference row groups, so the loaded data is guaranteed to be disjoint
+    from training, validation, and reference data.
 
     Parameters
     ----------
     config : PipelineConfig
-    calib_start_label_idx : int
+    calib_start_label_idx : int, optional
         Cumulative label index where calibration rows begin in the flat
-        labels file.
+        labels file.  When *None* (default), the offset is computed
+        automatically from parquet row-group metadata.
 
     Returns
     -------
@@ -149,6 +154,12 @@ def load_calib(
 
     pf = pq.ParquetFile(parquet_path)
     calib_start_idx = train_size + valid_size + ref_size
+
+    if calib_start_label_idx is None:
+        calib_start_label_idx = sum(
+            pf.metadata.row_group(i).num_rows for i in range(calib_start_idx)
+        )
+
     calib_tables = [
         pf.read_row_group(i)
         for i in range(calib_start_idx, calib_start_idx + calib_size)
