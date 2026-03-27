@@ -10,9 +10,23 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
-import pyarrow.parquet as pq
+
+try:
+    import pyarrow.parquet as pq
+except ModuleNotFoundError:  # pragma: no cover - depends on local extras
+    pq = None
 
 from conformal_predictions.config import PipelineConfig
+
+
+def _get_parquet_module():
+    if pq is None:
+        raise ModuleNotFoundError(
+            "pyarrow is required to load HiggsML parquet data. "
+            "Install the optional Higgs dependencies before using "
+            "conformal_predictions.data.higgs."
+        )
+    return pq
 
 
 def load_trainval(
@@ -39,7 +53,8 @@ def load_trainval(
     valid_size = int(config.valid_size)
     ref_size = int(config.ref_size) if config.ref_size is not None else 0
 
-    pf = pq.ParquetFile(parquet_path)
+    parquet = _get_parquet_module()
+    pf = parquet.ParquetFile(parquet_path)
 
     train_tables = [pf.read_row_group(i) for i in range(train_size)]
     val_tables = [
@@ -103,7 +118,8 @@ def load_ref(
             "ref_size is 0; set ref_size > 0 in your config to use a reference set."
         )
 
-    pf = pq.ParquetFile(parquet_path)
+    parquet = _get_parquet_module()
+    pf = parquet.ParquetFile(parquet_path)
     ref_start = train_size + valid_size
 
     # Compute label offset from row-group metadata (no data reads needed)
@@ -152,7 +168,8 @@ def load_calib(
     calib_size = int(config.calib_size)
     block_size = int(config.block_size)
 
-    pf = pq.ParquetFile(parquet_path)
+    parquet = _get_parquet_module()
+    pf = parquet.ParquetFile(parquet_path)
     calib_start_idx = train_size + valid_size + ref_size
 
     if calib_start_label_idx is None:
@@ -201,15 +218,17 @@ def load_calib(
 
 def load_test(
     config: PipelineConfig,
-    test_start_label_idx: int,
+    test_start_label_idx: int | None = None,
 ) -> List[List]:
     """Load test blocks from HiggsML data.
 
     Parameters
     ----------
     config : PipelineConfig
-    test_start_label_idx : int
+    test_start_label_idx : int, optional
         Cumulative label index where test rows begin in the flat labels file.
+        When *None* (default), the offset is computed automatically from
+        parquet row-group metadata.
 
     Returns
     -------
@@ -227,8 +246,13 @@ def load_test(
     test_size = int(config.test_size)
     block_size = int(config.block_size)
 
-    pf = pq.ParquetFile(parquet_path)
+    parquet = _get_parquet_module()
+    pf = parquet.ParquetFile(parquet_path)
     test_start_idx = train_size + valid_size + ref_size + calib_size
+    if test_start_label_idx is None:
+        test_start_label_idx = sum(
+            pf.metadata.row_group(i).num_rows for i in range(test_start_idx)
+        )
     test_tables = [
         pf.read_row_group(i) for i in range(test_start_idx, test_start_idx + test_size)
     ]

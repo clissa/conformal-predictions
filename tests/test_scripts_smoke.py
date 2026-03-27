@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import csv
 import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
 
 import numpy as np
+
+from conformal_predictions.config import PipelineConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
@@ -34,6 +37,11 @@ class _DummyModel:
 
     def score(self, _X: np.ndarray, _y: np.ndarray) -> float:
         return 1.0
+
+
+class _IdentityScaler:
+    def transform(self, X: np.ndarray) -> np.ndarray:
+        return X
 
 
 def _fake_load_pseudo_experiment(_path: Path):
@@ -517,3 +525,277 @@ def test_train_higgs_command_smoke(tmp_path, monkeypatch):
     assert (stats_dir / "mu_hat_calib_distribution.npz").exists()
     assert (stats_dir / "mu_hat_nonconf_scores.npz").exists()
     assert (stats_dir / "mu_hat_calibration_stats.csv").exists()
+
+
+def test_evaluate_command_smoke(tmp_path, monkeypatch):
+    module = _load_script_module(
+        "script_evaluate_smoke",
+        SCRIPTS_DIR / "evaluate.py",
+    )
+
+    output_dir = "eval-smoke"
+    config_path = tmp_path / "evaluate_config.yaml"
+    config_path.write_text(
+        """\
+data_source: toy
+data_dir: data/toy_scale_easy
+mu: 1.0
+seed: 18
+threshold: 0.5
+how: abs
+nonconf_target: n_pred
+output_dir: eval-smoke
+fit_parallel: false
+valid_size: 0.2
+calib_size: 0.5
+n_test_experiments: 1
+test_prefixes:
+  - "7e39"
+"""
+    )
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["evaluate.py", "--config", str(config_path), "--model", "GLM"],
+    )
+
+    artifacts_dir = tmp_path / "results" / output_dir / "artifacts"
+    stats_dir = tmp_path / "results" / output_dir / "stats"
+    plots_dir = tmp_path / "results" / output_dir / "plots"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    stats_dir.mkdir(parents=True, exist_ok=True)
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    (artifacts_dir / "GLM.joblib").write_text("placeholder")
+    (artifacts_dir / "scaler.joblib").write_text("placeholder")
+    (artifacts_dir / "reference_efficiencies.json").write_text("{}")
+    np.savez(stats_dir / "n_pred_nonconf_scores.npz", GLM=np.array([0.1, 0.2]))
+
+    train_file = tmp_path / "train.npz"
+    val_file = tmp_path / "val.npz"
+    calib_file = tmp_path / "calib.npz"
+    test_file = tmp_path / "test.npz"
+
+    monkeypatch.setattr(
+        module,
+        "list_split_files",
+        lambda *_args, **_kwargs: (
+            [train_file],
+            [val_file],
+            [calib_file],
+            [test_file],
+        ),
+    )
+
+    def fake_load_pseudo_experiment(path: Path):
+        assert path == test_file
+        X = np.array([[0.1, 0.9], [0.9, 0.1]], dtype=np.float32)
+        y = np.array([1, 0], dtype=np.int64)
+        meta = {
+            "mu_true": 1.0,
+            "gamma_true": 10.0,
+            "beta_true": 20.0,
+            "nu_expected": 30.0,
+            "n_total": 2,
+        }
+        return X, y, meta
+
+    monkeypatch.setattr(module, "load_pseudo_experiment", fake_load_pseudo_experiment)
+    monkeypatch.setattr(module, "load_model", lambda *_args, **_kwargs: _DummyModel())
+    monkeypatch.setattr(
+        module, "load_scaler", lambda *_args, **_kwargs: _IdentityScaler()
+    )
+    monkeypatch.setattr(
+        module,
+        "load_efficiencies",
+        lambda *_args, **_kwargs: {"GLM": (1.0, 1.0)},
+    )
+
+    def fake_inference_on_test_set(
+        models,
+        scaler,
+        test_data,
+        threshold,
+        ref_efficiencies_dict,
+        debug=False,
+    ):
+        assert list(models.keys()) == ["GLM"]
+        assert isinstance(scaler, _IdentityScaler)
+        assert threshold == 0.5
+        assert ref_efficiencies_dict == {"GLM": (1.0, 1.0)}
+        assert debug is False
+        assert len(test_data) == 1
+        X_test, y_test, meta = test_data[0]
+        assert X_test.shape == (2, 2)
+        assert y_test.tolist() == [1, 0]
+        assert meta["mu_true"] == 1.0
+        return (
+            {"GLM": [1.0]},
+            [1.0],
+            [10.0],
+            {
+                "GLM": [
+                    {
+                        "accuracy": 1.0,
+                        "precision": 1.0,
+                        "recall": 1.0,
+                        "f1": 1.0,
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr(module, "inference_on_test_set", fake_inference_on_test_set)
+    monkeypatch.setattr(
+        module,
+        "compute_confidence_interval",
+        lambda y_pred, *_args, **_kwargs: (
+            np.asarray(y_pred, dtype=np.float64) - 2.0,
+            np.asarray(y_pred, dtype=np.float64) + 2.0,
+        ),
+    )
+
+    def fake_plot_confidence_intervals(
+        mu_hat_values,
+        mu_hat_lower_bounds,
+        mu_hat_upper_bounds,
+        mu_true_list,
+        model_name,
+        empirical_coverage,
+        output_dir,
+    ):
+        assert mu_hat_values == [1.0]
+        assert mu_hat_lower_bounds == [0.8]
+        assert mu_hat_upper_bounds == [1.2]
+        assert mu_true_list == [1.0]
+        assert model_name == "GLM"
+        assert empirical_coverage == 1.0
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "test_CI_plots-1_GLM.png").write_text("plot")
+
+    monkeypatch.setattr(
+        module,
+        "plot_confidence_intervals",
+        fake_plot_confidence_intervals,
+    )
+
+    module.main()
+
+    coverage_path = stats_dir / "test_coverage.csv"
+    experiment_metrics_path = stats_dir / "test_experiment_metrics.csv"
+    performance_summary_path = stats_dir / "test_performance_summary.csv"
+    assert coverage_path.exists()
+    assert experiment_metrics_path.exists()
+    assert performance_summary_path.exists()
+    assert (plots_dir / "test_CI_plots-1_GLM.png").exists()
+
+    with coverage_path.open(newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 1
+    assert rows[0]["model"] == "GLM"
+    assert rows[0]["nonconf_target"] == "n_pred"
+    assert float(rows[0]["empirical_coverage"]) == 1.0
+
+    with experiment_metrics_path.open(newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 1
+    assert rows[0]["model"] == "GLM"
+    assert float(rows[0]["mu_hat"]) == 1.0
+    assert float(rows[0]["mu_hat_lower"]) == 0.8
+    assert float(rows[0]["mu_hat_upper"]) == 1.2
+    assert rows[0]["contains_true"] == "True"
+
+    with performance_summary_path.open(newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 1
+    assert rows[0]["model"] == "GLM"
+    assert rows[0]["n_test_blocks"] == "1"
+    assert float(rows[0]["accuracy_mean"]) == 1.0
+    assert float(rows[0]["precision_mean"]) == 1.0
+    assert float(rows[0]["recall_mean"]) == 1.0
+    assert float(rows[0]["f1_mean"]) == 1.0
+
+
+def test_higgs_load_test_supports_automatic_and_explicit_offsets(tmp_path, monkeypatch):
+    import conformal_predictions.data.higgs as higgs_data
+
+    row_groups = [
+        np.array([[1.0, 1.1], [1.2, 1.3]], dtype=np.float32),
+        np.array([[2.0, 2.1], [2.2, 2.3]], dtype=np.float32),
+        np.array([[3.0, 3.1], [3.2, 3.3]], dtype=np.float32),
+        np.array([[4.0, 4.1], [4.2, 4.3]], dtype=np.float32),
+        np.array([[5.0, 5.1], [5.2, 5.3]], dtype=np.float32),
+    ]
+    labels = np.array([0, 1, 1, 0, 0, 0, 1, 1, 1, 0], dtype=np.int64)
+
+    class _FakeRowGroupMeta:
+        def __init__(self, num_rows: int) -> None:
+            self.num_rows = num_rows
+
+    class _FakeMetadata:
+        def __init__(self, groups: list[np.ndarray]) -> None:
+            self._groups = groups
+
+        def row_group(self, index: int) -> _FakeRowGroupMeta:
+            return _FakeRowGroupMeta(self._groups[index].shape[0])
+
+    class _FakeTable:
+        def __init__(self, values: np.ndarray) -> None:
+            self._values = values
+
+        def to_pandas(self):
+            return self
+
+        def to_numpy(self) -> np.ndarray:
+            return self._values
+
+    class _FakeParquetFile:
+        def __init__(self, groups: list[np.ndarray]) -> None:
+            self._groups = groups
+            self.metadata = _FakeMetadata(groups)
+
+        def read_row_group(self, index: int) -> _FakeTable:
+            return _FakeTable(self._groups[index])
+
+    fake_pq = type(
+        "_FakePQ",
+        (),
+        {"ParquetFile": lambda *_args, **_kwargs: _FakeParquetFile(row_groups)},
+    )()
+    monkeypatch.setattr(higgs_data, "pq", fake_pq)
+    monkeypatch.setattr(higgs_data.np, "loadtxt", lambda *_args, **_kwargs: labels)
+
+    config = PipelineConfig(
+        data_source="higgs",
+        data_dir=tmp_path,
+        mu=1.0,
+        seed=18,
+        threshold=0.5,
+        how="abs",
+        nonconf_target="mu_hat",
+        output_dir="unused",
+        fit_parallel=False,
+        valid_size=1,
+        calib_size=1,
+        train_size=1,
+        ref_size=1,
+        test_size=1,
+        block_size=2,
+    )
+
+    test_blocks_auto = higgs_data.load_test(config)
+    test_blocks_explicit = higgs_data.load_test(config, test_start_label_idx=8)
+
+    assert len(test_blocks_auto) == 1
+    assert len(test_blocks_explicit) == 1
+
+    X_auto, y_auto, meta_auto = test_blocks_auto[0]
+    X_explicit, y_explicit, meta_explicit = test_blocks_explicit[0]
+
+    assert np.array_equal(X_auto, row_groups[4])
+    assert np.array_equal(X_auto, X_explicit)
+    assert np.array_equal(y_auto, labels[8:10])
+    assert np.array_equal(y_auto, y_explicit)
+    assert meta_auto == meta_explicit
