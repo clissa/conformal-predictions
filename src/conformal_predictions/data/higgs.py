@@ -71,6 +71,53 @@ def load_trainval(
     return X_train, y_train, X_val, y_val, X_ref, y_ref
 
 
+def load_ref(
+    config: PipelineConfig,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Load only the reference split from HiggsML data.
+
+    Reference row groups sit immediately after train + validation row groups,
+    so the loaded data is guaranteed to be disjoint from training and
+    validation data.
+
+    Parameters
+    ----------
+    config : PipelineConfig
+        Must have ``train_size``, ``valid_size``, ``ref_size`` and
+        ``data_dir`` pointing to the HiggsML input directory.
+
+    Returns
+    -------
+    (X_ref, y_ref)
+    """
+    base_dir = config.data_dir
+    parquet_path = base_dir / "data" / "data.parquet"
+    labels_path = base_dir / "labels" / "data.labels"
+
+    train_size = int(config.train_size)
+    valid_size = int(config.valid_size)
+    ref_size = int(config.ref_size) if config.ref_size is not None else 0
+
+    if ref_size == 0:
+        raise ValueError(
+            "ref_size is 0; set ref_size > 0 in your config to use a reference set."
+        )
+
+    pf = pq.ParquetFile(parquet_path)
+    ref_start = train_size + valid_size
+
+    # Compute label offset from row-group metadata (no data reads needed)
+    label_offset = sum(pf.metadata.row_group(i).num_rows for i in range(ref_start))
+
+    ref_tables = [pf.read_row_group(i) for i in range(ref_start, ref_start + ref_size)]
+    X_ref = np.vstack([t.to_pandas().to_numpy() for t in ref_tables])
+
+    y_all = np.loadtxt(labels_path)
+    y_ref = y_all[label_offset : label_offset + X_ref.shape[0]]
+
+    return X_ref, y_ref
+
+
 def load_calib(
     config: PipelineConfig,
     calib_start_label_idx: int,

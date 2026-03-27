@@ -185,3 +185,11 @@ def load_models(output_dir: Path) -> Dict[str, Any]:
     for path in sorted(output_dir.glob("*.joblib")):
         models[path.stem] = joblib.load(path)
     return models
+
+
+def load_model(output_dir: Path, name: str) -> Any:
+    """Load a single model by *name* from *output_dir*."""
+    path = Path(output_dir) / f"{name}.joblib"
+    if not path.exists():
+        raise FileNotFoundError(f"No model file found at {path}")
+    return joblib.load(path)

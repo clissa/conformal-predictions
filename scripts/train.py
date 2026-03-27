@@ -49,6 +49,20 @@ def _parse_args() -> argparse.Namespace:
         choices=list(_MODEL_CLI_MAP.keys()),
         help="Model to train (GLM, RF, or MLP).",
     )
+    parser.add_argument(
+        "--compute-reference",
+        action="store_true",
+        default=True,
+        dest="compute_reference",
+        help="Compute reference efficiencies after training (default).",
+    )
+    parser.add_argument(
+        "--no-compute-reference",
+        action="store_false",
+        dest="compute_reference",
+        help="Skip reference efficiency computation "
+        "(use scripts/reference.py instead).",
+    )
     return parser.parse_args()
 
 
@@ -159,21 +173,26 @@ def main() -> None:
         )
 
     # ---- 5. Reference efficiencies ----
-    print("\n[Computing reference efficiencies...]")
-    if config.data_source == "higgs" and X_ref.shape[0] > 0:
-        X_ref_scaled = scaler.transform(X_ref)
-    else:
-        X_ref_scaled = X_ref
+    if args.compute_reference:
+        print("\n[Computing reference efficiencies...]")
+        if config.data_source == "higgs" and X_ref.shape[0] > 0:
+            X_ref_scaled = scaler.transform(X_ref)
+        else:
+            X_ref_scaled = X_ref
 
-    efficiencies = get_all_model_efficiencies(models, X_ref_scaled, y_ref, config)
-    for name, (eps_s, eps_b) in efficiencies.items():
-        print(f"  {name} — eps_signal: {eps_s:.4f}, eps_background: {eps_b:.4f}")
+        efficiencies = get_all_model_efficiencies(models, X_ref_scaled, y_ref, config)
+        for name, (eps_s, eps_b) in efficiencies.items():
+            print(f"  {name} — eps_signal: {eps_s:.4f}, eps_background: {eps_b:.4f}")
+    else:
+        print("\n[Skipping reference efficiencies (use scripts/reference.py)]")
+        efficiencies = None
 
     # ---- 6. Save artifacts ----
     print(f"\n[Saving artifacts to {artifacts_dir}]")
     save_models(models, artifacts_dir)
     save_scaler(scaler, artifacts_dir)
-    save_efficiencies(efficiencies, artifacts_dir)
+    if efficiencies is not None:
+        save_efficiencies(efficiencies, artifacts_dir)
 
     print("Done.")
 
