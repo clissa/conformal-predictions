@@ -86,30 +86,29 @@ EOF
 
 ## Usage
 
-Scripts in `scripts/` are the main entry points for data generation and toy
-training. Run them from the repository root after installing dependencies.
+Scripts in `scripts/` are the main entry points for data generation, training,
+calibration, and evaluation. Run them from the repository root after
+installing dependencies.
 
 Generate a single pseudo-experiment from a YAML config:
 
 ```bash
-python scripts/generate_one_experiment.py --config configs/toy_default.yaml --outdir data/toy_pseudo-experiment
+python scripts/generate.py --config configs/toy_default.yaml --outdir data/toy_pseudo-experiment --n-experiments 1
 ```
 
 Generate multiple pseudo-experiments (optionally in parallel):
 
 ```bash
-python scripts/generate_experiments.py --config configs/toy_default.yaml --outdir data/toy_scale --n-experiments 10 --n-workers 4
+python scripts/generate.py --config configs/toy_default.yaml --outdir data/toy_scale --n-experiments 10 --n-workers 4
 ```
 
 Run the toy training and conformal workflow:
 
 ```bash
-python scripts/train.py
+python scripts/train.py --config configs/train_toy.yaml --model GLM
+python scripts/calibrate.py --config configs/train_toy.yaml --model GLM
+python scripts/evaluate.py --config configs/train_toy.yaml --model GLM
 ```
-
-`scripts/train.py` currently reads settings from the `Settings` dataclass and
-`OUTPUT_DIRNAME` near the top of the file; it expects toy data under
-`data/toy_scale_easy` and writes outputs to `results/<OUTPUT_DIRNAME>/`.
 
 ## Planned extensions
 

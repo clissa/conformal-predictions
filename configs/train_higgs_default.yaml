@@ -1,5 +1,5 @@
 # Training configuration for Higgs ML dataset
-# Matches the Settings dataclass fields in scripts/train_higgs.py
+# Legacy example config retained for reference during the unified-script migration
 
 # Output directory name (used under results/)
 output_dirname: "higgs-sequential-q68-10train-10valid-10ref-10calib-10test"
