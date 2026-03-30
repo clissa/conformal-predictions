@@ -4,8 +4,9 @@ data_dir: data/HiggsML/input_data/train
 mu: 1.0
 seed: 20260330
 threshold: 0.5
-mu_hat_mode: corrected          # "raw" or "corrected"
-interval_mode: free_form        # "symmetric" or "free_form"
+mu_hat_mode: raw          # "raw" or "corrected"
+interval_mode: symmetric        # "symmetric" or "free_form"
+n_sigma: 1.0                    # alternative to alpha; 1-sigma => 68.27% central coverage
 nonconf_target: mu_hat          # "mu_hat" or "n_pred"
 output_dir: higgs-{mu_hat_mode}-{interval_mode}-{train_size}train-{valid_size}valid-{ref_size}ref-{calib_size}calib-{test_size}test
 fit_parallel: false

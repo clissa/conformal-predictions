@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import importlib.util
+import math
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -130,6 +131,11 @@ block_size: 10000
         config.output_dir
         == "higgs-corrected-symmetric-10train-5valid-2ref-10calib-10test"
     )
+    assert config.n_sigma == pytest.approx(1.0)
+    assert config.resolved_alpha == pytest.approx(
+        1.0 - math.erf(1.0 / math.sqrt(2.0))
+    )
+    assert config.confidence_level == pytest.approx(math.erf(1.0 / math.sqrt(2.0)))
 
 
 def test_load_config_rejects_unknown_output_dir_template_key(tmp_path):
@@ -180,6 +186,94 @@ output_dir: test-output
         load_config(config_path)
 
 
+def test_load_config_accepts_explicit_alpha(tmp_path):
+    config_path = tmp_path / "alpha_config.yaml"
+    config_path.write_text(
+        """\
+data_source: toy
+data_dir: data/toy_scale_easy
+mu_hat_mode: corrected
+interval_mode: symmetric
+alpha: 0.2
+output_dir: test-output
+"""
+    )
+
+    config = load_config(config_path)
+
+    assert config.alpha == pytest.approx(0.2)
+    assert config.n_sigma is None
+    assert config.resolved_alpha == pytest.approx(0.2)
+    assert config.confidence_level == pytest.approx(0.8)
+
+
+def test_load_config_accepts_explicit_n_sigma(tmp_path):
+    config_path = tmp_path / "n_sigma_config.yaml"
+    config_path.write_text(
+        """\
+data_source: toy
+data_dir: data/toy_scale_easy
+mu_hat_mode: corrected
+interval_mode: symmetric
+n_sigma: 2.0
+output_dir: test-output
+"""
+    )
+
+    config = load_config(config_path)
+
+    assert config.alpha is None
+    assert config.n_sigma == pytest.approx(2.0)
+    assert config.resolved_alpha == pytest.approx(
+        1.0 - math.erf(2.0 / math.sqrt(2.0))
+    )
+
+
+def test_load_config_rejects_alpha_and_n_sigma_together(tmp_path):
+    config_path = tmp_path / "invalid_confidence_config.yaml"
+    config_path.write_text(
+        """\
+data_source: toy
+data_dir: data/toy_scale_easy
+mu_hat_mode: corrected
+interval_mode: symmetric
+alpha: 0.2
+n_sigma: 1.0
+output_dir: test-output
+"""
+    )
+
+    with pytest.raises(ValueError, match="either alpha or n_sigma"):
+        load_config(config_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("alpha", 0.0, "0 < alpha < 1"),
+        ("alpha", 1.0, "0 < alpha < 1"),
+        ("n_sigma", 0.0, "n_sigma > 0"),
+    ],
+)
+def test_load_config_rejects_invalid_confidence_settings(
+    tmp_path, field, value, message
+):
+    config_path = tmp_path / f"invalid_{field}.yaml"
+    config_path.write_text(
+        f"""\
+data_source: toy
+data_dir: data/toy_scale_easy
+mu_hat_mode: corrected
+interval_mode: symmetric
+{field}: {value}
+output_dir: test-output
+"""
+    )
+
+    with pytest.raises(ValueError, match=message):
+        load_config(config_path)
+
+
 def test_compute_mu_hat_supports_raw_and_corrected_modes():
     meta = {
         "gamma_true": 10.0,
@@ -198,24 +292,27 @@ def test_compute_mu_hat_supports_raw_and_corrected_modes():
 def test_compute_confidence_interval_supports_new_interval_modes(tmp_path):
     nonconf_scores_file = tmp_path / "scores.npz"
     np.savez(nonconf_scores_file, GLM=np.array([1.0, 2.0, 3.0, 4.0]))
+    alpha = 1.0 - math.erf(1.0 / math.sqrt(2.0))
 
     lower_sym, upper_sym = compute_confidence_interval(
         np.array([10.0]),
         nonconf_scores_file,
         "GLM",
         interval_mode="symmetric",
+        alpha=alpha,
     )
     lower_ff, upper_ff = compute_confidence_interval(
         np.array([10.0]),
         nonconf_scores_file,
         "GLM",
         interval_mode="free_form",
+        alpha=alpha,
     )
 
-    assert lower_sym == pytest.approx([6.96])
-    assert upper_sym == pytest.approx([13.04])
-    assert lower_ff == pytest.approx([11.48])
-    assert upper_ff == pytest.approx([13.52])
+    assert lower_sym == pytest.approx([6.95193154])
+    assert upper_sym == pytest.approx([13.04806846])
+    assert lower_ff == pytest.approx([11.47596577])
+    assert upper_ff == pytest.approx([13.52403423])
 
 
 def test_generate_single_smoke(tmp_path, monkeypatch):
@@ -507,12 +604,12 @@ def test_calibrate_command_smoke(tmp_path, monkeypatch):
             {"GLM": [1.0, 1.2]},
             {
                 "GLM": {
-                    "q16": 0.9,
+                    "quantile_lower": 0.9,
                     "map": 1.0,
                     "mu_median": 1.1,
                     "mu_mean": 1.1,
-                    "q68": 1.2,
-                    "q84": 1.3,
+                    "central_quantile": 1.2,
+                    "quantile_upper": 1.3,
                 }
             },
         ),
@@ -531,7 +628,7 @@ def test_calibrate_command_smoke(tmp_path, monkeypatch):
     monkeypatch.setattr(
         module,
         "plot_mu_hat_distribution",
-        lambda _mu_hat, _stats, output_dir, pred_formula: (
+        lambda _mu_hat, _stats, output_dir, pred_formula, confidence_level: (
             output_dir.mkdir(parents=True, exist_ok=True),
             (output_dir / "mu_hat_distribution_GLM.png").write_text("plot"),
         ),
@@ -547,6 +644,14 @@ def test_calibrate_command_smoke(tmp_path, monkeypatch):
     assert (plots_dir / "mu_hat_scores_distribution_GLM.png").exists()
     assert (plots_dir / "mu_hat_scores_distribution_comparison.png").exists()
     assert (plots_dir / "mu_hat_distribution_GLM.png").exists()
+
+    with (stats_dir / "mu_hat_calibration_stats.csv").open(newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 1
+    assert float(rows[0]["alpha"]) == pytest.approx(1.0 - math.erf(1.0 / math.sqrt(2.0)))
+    assert float(rows[0]["confidence_level"]) == pytest.approx(
+        math.erf(1.0 / math.sqrt(2.0))
+    )
 
 
 def test_evaluate_command_smoke(tmp_path, monkeypatch):
@@ -669,6 +774,7 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
         mu_true_list,
         model_name,
         empirical_coverage,
+        confidence_level,
         output_dir,
     ):
         assert mu_hat_values == [1.0]
@@ -677,6 +783,7 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
         assert mu_true_list == [1.0]
         assert model_name == "GLM"
         assert empirical_coverage == 1.0
+        assert confidence_level == pytest.approx(math.erf(1.0 / math.sqrt(2.0)))
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "test_CI_plots-1_GLM.png").write_text("plot")
 
@@ -703,6 +810,10 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
     assert rows[0]["nonconf_target"] == "n_pred"
     assert rows[0]["mu_hat_mode"] == "corrected"
     assert rows[0]["interval_mode"] == "symmetric"
+    assert float(rows[0]["alpha"]) == pytest.approx(1.0 - math.erf(1.0 / math.sqrt(2.0)))
+    assert float(rows[0]["confidence_level"]) == pytest.approx(
+        math.erf(1.0 / math.sqrt(2.0))
+    )
     assert float(rows[0]["empirical_coverage"]) == 1.0
 
     with experiment_metrics_path.open(newline="") as fh:
@@ -714,6 +825,10 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
     assert float(rows[0]["mu_hat_upper"]) == 1.2
     assert rows[0]["mu_hat_mode"] == "corrected"
     assert rows[0]["interval_mode"] == "symmetric"
+    assert float(rows[0]["alpha"]) == pytest.approx(1.0 - math.erf(1.0 / math.sqrt(2.0)))
+    assert float(rows[0]["confidence_level"]) == pytest.approx(
+        math.erf(1.0 / math.sqrt(2.0))
+    )
     assert rows[0]["contains_true"] == "True"
 
     with performance_summary_path.open(newline="") as fh:
@@ -722,6 +837,10 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
     assert rows[0]["model"] == "GLM"
     assert rows[0]["mu_hat_mode"] == "corrected"
     assert rows[0]["interval_mode"] == "symmetric"
+    assert float(rows[0]["alpha"]) == pytest.approx(1.0 - math.erf(1.0 / math.sqrt(2.0)))
+    assert float(rows[0]["confidence_level"]) == pytest.approx(
+        math.erf(1.0 / math.sqrt(2.0))
+    )
     assert rows[0]["n_test_blocks"] == "1"
     assert float(rows[0]["accuracy_mean"]) == 1.0
     assert float(rows[0]["precision_mean"]) == 1.0

@@ -17,6 +17,7 @@ def plot_mu_hat_distribution(
     stats: Dict[str, Dict[str, float]],
     output_dir: Path = Path("plots"),
     pred_formula: str = r"$\hat{\mu} = n_{pred} / \gamma_{true}$",
+    confidence_level: float = 0.6826894921370859,
 ) -> None:
     """Plot mu_hat distributions."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -37,11 +38,11 @@ def plot_mu_hat_distribution(
 
         s = stats[model_name]
         ax.axvline(
-            s["q16"],
+            s["quantile_lower"],
             color="green",
             linestyle="--",
             linewidth=2,
-            label=f"q16: {s['q16']:.3f}",
+            label=f"q_low: {s['quantile_lower']:.3f}",
         )
         ax.axvline(
             s["mu_median"],
@@ -58,18 +59,18 @@ def plot_mu_hat_distribution(
             label=f"mean: {s['mu_mean']:.3f}",
         )
         ax.axvline(
-            s["q68"],
+            s["central_quantile"],
             color="tab:cyan",
             linestyle="--",
             linewidth=2,
-            label=f"q68: {s['q68']:.3f}",
+            label=f"q_central: {s['central_quantile']:.3f}",
         )
         ax.axvline(
-            s["q84"],
+            s["quantile_upper"],
             color="purple",
             linestyle="--",
             linewidth=2,
-            label=f"q84: {s['q84']:.3f}",
+            label=f"q_high: {s['quantile_upper']:.3f}",
         )
         ax.axvline(
             s["map"],
@@ -79,7 +80,10 @@ def plot_mu_hat_distribution(
             label=f"MAP: {s['map']:.3f}",
         )
 
-        ax.set_title(f"$\hat{{\mu}}$ Distribution: {model_name}")
+        ax.set_title(
+            f"$\\hat{{\\mu}}$ Distribution: {model_name} "
+            f"({confidence_level * 100:.2f}% central)"
+        )
         ax.set_xlabel(pred_formula)
         ax.set_ylabel("Density")
         ax.legend()
@@ -241,6 +245,7 @@ def plot_confidence_intervals(
     mu_true_list: List[float],
     model_name: str,
     empirical_coverage: float,
+    confidence_level: float,
     output_dir: Path = Path("plots"),
 ) -> None:
     """Plot confidence intervals for mu_hat estimates."""
@@ -295,9 +300,10 @@ def plot_confidence_intervals(
         ):
             ax = plot_CI(CI_y, mu_hat, mu_hat_lower, mu_hat_upper, mu_true, ax)
 
-        # TODO: enhance to support custom confidence level
-        # add legend with empirical coverage and nominal confidence level
-        coverage_legend = f"""Empirical coverage: {empirical_coverage*100:.3f}%\nConfidence level(1-$\\alpha$): 68%"""
+        coverage_legend = (
+            f"Empirical coverage: {empirical_coverage*100:.3f}%\n"
+            f"Confidence level (1-$\\alpha$): {confidence_level*100:.2f}%"
+        )
         ax.text(
             0.95,
             0.99,

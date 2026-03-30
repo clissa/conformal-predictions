@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -26,6 +27,8 @@ class PipelineConfig:
     fit_parallel: bool = False
     valid_size: float = 0.2
     calib_size: float = 0.5
+    alpha: Optional[float] = None
+    n_sigma: Optional[float] = None
 
     # --- higgs-specific ------------------------------------------------
     train_size: Optional[float] = None
@@ -60,6 +63,18 @@ class PipelineConfig:
             )
         raise ValueError(f"Unknown mu_hat_mode: {self.mu_hat_mode!r}")
 
+    @property
+    def resolved_alpha(self) -> float:
+        if self.alpha is not None:
+            return self.alpha
+        if self.n_sigma is not None:
+            return 1.0 - math.erf(self.n_sigma / math.sqrt(2.0))
+        return 1.0 - math.erf(1.0 / math.sqrt(2.0))
+
+    @property
+    def confidence_level(self) -> float:
+        return 1.0 - self.resolved_alpha
+
 
 def _resolve_output_dir_template(raw: Dict[str, Any]) -> None:
     """Format ``output_dir`` with values from the same YAML mapping."""
@@ -84,6 +99,26 @@ def _validate_choice(raw: Dict[str, Any], key: str, allowed: tuple[str, ...]) ->
         raise ValueError(f"Invalid {key}={value!r}. Expected one of: {allowed_str}.")
 
 
+def _resolve_confidence_config(raw: Dict[str, Any]) -> None:
+    alpha = raw.get("alpha")
+    n_sigma = raw.get("n_sigma")
+
+    if alpha is not None and n_sigma is not None:
+        raise ValueError("Configuration accepts either alpha or n_sigma, not both.")
+
+    if alpha is None and n_sigma is None:
+        raw["n_sigma"] = 1.0
+        return
+
+    if alpha is not None:
+        if not 0.0 < float(alpha) < 1.0:
+            raise ValueError(f"Invalid alpha={alpha!r}. Expected 0 < alpha < 1.")
+        return
+
+    if not float(n_sigma) > 0.0:
+        raise ValueError(f"Invalid n_sigma={n_sigma!r}. Expected n_sigma > 0.")
+
+
 def load_config(path: str | Path) -> PipelineConfig:
     """Load a YAML config file and return a *PipelineConfig* instance."""
     path = Path(path)
@@ -92,6 +127,7 @@ def load_config(path: str | Path) -> PipelineConfig:
 
     _validate_choice(raw, "mu_hat_mode", ("raw", "corrected"))
     _validate_choice(raw, "interval_mode", ("symmetric", "free_form"))
+    _resolve_confidence_config(raw)
 
     _resolve_output_dir_template(raw)
 

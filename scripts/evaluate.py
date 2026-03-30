@@ -134,6 +134,7 @@ def _compute_mu_hat_confidence_bounds(
     model_name: str,
     interval_mode: str,
     nonconf_target: str,
+    alpha: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
     mu_hat_array = np.asarray(mu_hat_values, dtype=np.float64)
 
@@ -143,6 +144,7 @@ def _compute_mu_hat_confidence_bounds(
             nonconf_scores_file,
             model_name,
             interval_mode=interval_mode,
+            alpha=alpha,
         )
         return np.asarray(lower, dtype=np.float64), np.asarray(upper, dtype=np.float64)
 
@@ -159,6 +161,7 @@ def _compute_mu_hat_confidence_bounds(
             nonconf_scores_file,
             model_name,
             interval_mode=interval_mode,
+            alpha=alpha,
         )
         return (
             np.asarray(n_lower, dtype=np.float64) / gamma_true_array,
@@ -178,6 +181,8 @@ def _build_experiment_rows(
     metrics: Sequence[dict],
     mu_hat_mode: str,
     interval_mode: str,
+    alpha: float,
+    confidence_level: float,
 ) -> List[dict]:
     rows: List[dict] = []
     for experiment_idx, (
@@ -205,6 +210,8 @@ def _build_experiment_rows(
             "gamma_true": float(gamma_true),
             "mu_hat_mode": mu_hat_mode,
             "interval_mode": interval_mode,
+            "alpha": alpha,
+            "confidence_level": confidence_level,
             "contains_true": bool(lower < mu_true < upper),
         }
         if experiment_idx < len(metrics):
@@ -218,6 +225,8 @@ def _build_performance_summary_rows(
     metrics: Sequence[dict],
     mu_hat_mode: str,
     interval_mode: str,
+    alpha: float,
+    confidence_level: float,
 ) -> List[dict]:
     if not metrics:
         return []
@@ -227,6 +236,8 @@ def _build_performance_summary_rows(
         "model": model_name,
         "mu_hat_mode": mu_hat_mode,
         "interval_mode": interval_mode,
+        "alpha": alpha,
+        "confidence_level": confidence_level,
         "n_test_blocks": len(metrics),
     }
     for metric_name in metric_names:
@@ -318,6 +329,7 @@ def main() -> None:
             current_model_name,
             config.interval_mode,
             config.nonconf_target,
+            config.resolved_alpha,
         )
         empirical_coverage = compute_empirical_coverage(
             lower_bounds,
@@ -336,6 +348,7 @@ def main() -> None:
             list(mu_true_list),
             current_model_name,
             empirical_coverage,
+            config.confidence_level,
             output_dir=plots_dir,
         )
 
@@ -345,6 +358,8 @@ def main() -> None:
                 "nonconf_target": config.nonconf_target,
                 "mu_hat_mode": config.mu_hat_mode,
                 "interval_mode": config.interval_mode,
+                "alpha": config.resolved_alpha,
+                "confidence_level": config.confidence_level,
                 "n_test_blocks": len(mu_hat_values),
                 "empirical_coverage": float(empirical_coverage),
             }
@@ -360,6 +375,8 @@ def main() -> None:
                 performance_metrics.get(current_model_name, []),
                 config.mu_hat_mode,
                 config.interval_mode,
+                config.resolved_alpha,
+                config.confidence_level,
             )
         )
         performance_summary_rows.extend(
@@ -368,6 +385,8 @@ def main() -> None:
                 performance_metrics.get(current_model_name, []),
                 config.mu_hat_mode,
                 config.interval_mode,
+                config.resolved_alpha,
+                config.confidence_level,
             )
         )
 

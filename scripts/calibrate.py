@@ -183,6 +183,7 @@ def main() -> None:
         config.threshold,
         config.mu_hat_mode,
         ref_efficiencies=ref_efficiencies,
+        alpha=config.resolved_alpha,
     )
 
     print(f"\n[Saving calibration plots to {plots_dir}...]")
@@ -197,6 +198,7 @@ def main() -> None:
             stats,
             output_dir=plots_dir,
             pred_formula=config.pred_formula,
+            confidence_level=config.confidence_level,
         )
 
     # ---- 5. Save artifacts ----
@@ -220,6 +222,8 @@ def main() -> None:
                     "mu_hat_mode": config.mu_hat_mode,
                     "interval_mode": config.interval_mode,
                     "nonconf_target": config.nonconf_target,
+                    "alpha": config.resolved_alpha,
+                    "confidence_level": config.confidence_level,
                     **s,
                 }
                 for name, s in stats.items()

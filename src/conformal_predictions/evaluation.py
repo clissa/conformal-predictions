@@ -142,6 +142,7 @@ def compute_confidence_interval(
     nonconf_scores_file: Path,
     model_name: str,
     interval_mode: str,
+    alpha: float,
 ) -> Tuple[float, float]:
     """
     Compute confidence interval from calibration nonconformity scores.
@@ -151,6 +152,7 @@ def compute_confidence_interval(
         nonconf_scores_file: Path to .npz file containing nonconformity scores
         model_name: Name of the model to extract scores for
         interval_mode: Interval construction mode ("symmetric" or "free_form")
+        alpha: Miscoverage level for the central interval
     Returns:
         Tuple of (lower_bound, upper_bound) for the confidence interval
     """
@@ -161,11 +163,12 @@ def compute_confidence_interval(
     scores = data[model_name]
 
     if interval_mode == "free_form":
-        q_low = float(np.percentile(scores, 16))
-        q_high = float(np.percentile(scores, 84))
+        q_low = float(np.percentile(scores, 100.0 * alpha / 2.0))
+        q_high = float(np.percentile(scores, 100.0 * (1.0 - alpha / 2.0)))
     elif interval_mode == "symmetric":
-        q_low = -np.percentile(scores, 68)
-        q_high = np.percentile(scores, 68)
+        q = float(np.percentile(scores, 100.0 * (1.0 - alpha)))
+        q_low = -q
+        q_high = q
     else:
         raise ValueError(f"Unknown interval_mode: {interval_mode}")
 
