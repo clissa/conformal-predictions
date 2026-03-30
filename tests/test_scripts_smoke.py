@@ -10,7 +10,9 @@ import numpy as np
 
 import pytest
 
+from conformal_predictions.calibration import _compute_mu_hat
 from conformal_predictions.config import PipelineConfig, load_config
+from conformal_predictions.evaluation import compute_confidence_interval
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
@@ -80,7 +82,8 @@ data_dir: {path.parent / "data"}
 mu: 1.0
 seed: 18
 threshold: 0.5
-how: abs
+mu_hat_mode: corrected
+interval_mode: symmetric
 nonconf_target: {nonconf_target}
 output_dir: {output_dir}
 fit_parallel: false
@@ -107,9 +110,10 @@ data_dir: data/HiggsML/input_data/train
 mu: 1.0
 seed: 18
 threshold: 0.5
-how: abs
+mu_hat_mode: corrected
+interval_mode: symmetric
 nonconf_target: mu_hat
-output_dir: higgs-{how}-{train_size}train-{valid_size}valid-{ref_size}ref-{calib_size}calib-{test_size}test
+output_dir: higgs-{mu_hat_mode}-{interval_mode}-{train_size}train-{valid_size}valid-{ref_size}ref-{calib_size}calib-{test_size}test
 fit_parallel: false
 valid_size: 5
 calib_size: 10
@@ -122,7 +126,10 @@ block_size: 10000
 
     config = load_config(config_path)
 
-    assert config.output_dir == "higgs-abs-10train-5valid-2ref-10calib-10test"
+    assert (
+        config.output_dir
+        == "higgs-corrected-symmetric-10train-5valid-2ref-10calib-10test"
+    )
 
 
 def test_load_config_rejects_unknown_output_dir_template_key(tmp_path):
@@ -131,12 +138,84 @@ def test_load_config_rejects_unknown_output_dir_template_key(tmp_path):
         """\
 data_source: higgs
 data_dir: data/HiggsML/input_data/train
+mu_hat_mode: corrected
+interval_mode: symmetric
 output_dir: higgs-{missing_key}
 """
     )
 
     with pytest.raises(ValueError, match="Unknown output_dir placeholder 'missing_key'"):
         load_config(config_path)
+
+
+def test_load_config_rejects_invalid_mu_hat_mode(tmp_path):
+    config_path = tmp_path / "invalid_mu_hat_mode.yaml"
+    config_path.write_text(
+        """\
+data_source: toy
+data_dir: data/toy_scale_easy
+mu_hat_mode: invalid
+interval_mode: symmetric
+output_dir: test-output
+"""
+    )
+
+    with pytest.raises(ValueError, match="Invalid mu_hat_mode='invalid'"):
+        load_config(config_path)
+
+
+def test_load_config_rejects_invalid_interval_mode(tmp_path):
+    config_path = tmp_path / "invalid_interval_mode.yaml"
+    config_path.write_text(
+        """\
+data_source: toy
+data_dir: data/toy_scale_easy
+mu_hat_mode: corrected
+interval_mode: invalid
+output_dir: test-output
+"""
+    )
+
+    with pytest.raises(ValueError, match="Invalid interval_mode='invalid'"):
+        load_config(config_path)
+
+
+def test_compute_mu_hat_supports_raw_and_corrected_modes():
+    meta = {
+        "gamma_true": 10.0,
+        "beta_true": 20.0,
+        "nu_expected": 30.0,
+        "n_total": 3,
+    }
+
+    raw_mu_hat = _compute_mu_hat(1, meta, "raw")
+    corrected_mu_hat = _compute_mu_hat(1, meta, "corrected", (1.0, 1.0))
+
+    assert raw_mu_hat == pytest.approx(1.0)
+    assert corrected_mu_hat == pytest.approx(-1.0)
+
+
+def test_compute_confidence_interval_supports_new_interval_modes(tmp_path):
+    nonconf_scores_file = tmp_path / "scores.npz"
+    np.savez(nonconf_scores_file, GLM=np.array([1.0, 2.0, 3.0, 4.0]))
+
+    lower_sym, upper_sym = compute_confidence_interval(
+        np.array([10.0]),
+        nonconf_scores_file,
+        "GLM",
+        interval_mode="symmetric",
+    )
+    lower_ff, upper_ff = compute_confidence_interval(
+        np.array([10.0]),
+        nonconf_scores_file,
+        "GLM",
+        interval_mode="free_form",
+    )
+
+    assert lower_sym == pytest.approx([6.96])
+    assert upper_sym == pytest.approx([13.04])
+    assert lower_ff == pytest.approx([11.48])
+    assert upper_ff == pytest.approx([13.52])
 
 
 def test_generate_single_smoke(tmp_path, monkeypatch):
@@ -542,12 +621,14 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
         scaler,
         test_data,
         threshold,
+        mu_hat_mode,
         ref_efficiencies_dict,
         debug=False,
     ):
         assert list(models.keys()) == ["GLM"]
         assert isinstance(scaler, _IdentityScaler)
         assert threshold == 0.5
+        assert mu_hat_mode == "corrected"
         assert ref_efficiencies_dict == {"GLM": (1.0, 1.0)}
         assert debug is False
         assert len(test_data) == 1
@@ -620,6 +701,8 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
     assert len(rows) == 1
     assert rows[0]["model"] == "GLM"
     assert rows[0]["nonconf_target"] == "n_pred"
+    assert rows[0]["mu_hat_mode"] == "corrected"
+    assert rows[0]["interval_mode"] == "symmetric"
     assert float(rows[0]["empirical_coverage"]) == 1.0
 
     with experiment_metrics_path.open(newline="") as fh:
@@ -629,12 +712,16 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
     assert float(rows[0]["mu_hat"]) == 1.0
     assert float(rows[0]["mu_hat_lower"]) == 0.8
     assert float(rows[0]["mu_hat_upper"]) == 1.2
+    assert rows[0]["mu_hat_mode"] == "corrected"
+    assert rows[0]["interval_mode"] == "symmetric"
     assert rows[0]["contains_true"] == "True"
 
     with performance_summary_path.open(newline="") as fh:
         rows = list(csv.DictReader(fh))
     assert len(rows) == 1
     assert rows[0]["model"] == "GLM"
+    assert rows[0]["mu_hat_mode"] == "corrected"
+    assert rows[0]["interval_mode"] == "symmetric"
     assert rows[0]["n_test_blocks"] == "1"
     assert float(rows[0]["accuracy_mean"]) == 1.0
     assert float(rows[0]["precision_mean"]) == 1.0
@@ -697,7 +784,8 @@ def test_higgs_load_test_supports_automatic_and_explicit_offsets(tmp_path, monke
         mu=1.0,
         seed=18,
         threshold=0.5,
-        how="abs",
+        mu_hat_mode="corrected",
+        interval_mode="symmetric",
         nonconf_target="mu_hat",
         output_dir="unused",
         fit_parallel=False,

@@ -1,26 +1,19 @@
-# Training configuration for toy pseudo-experiments
-# Matches the Settings dataclass fields in scripts/train.py
-
-# Output directory name (used under results/)
-output_dirname: "test_toy-scale-easy-1000-test-2100-calib"
-
-# Data settings
-data_dir: "data/toy_scale_easy"
+# Toy pipeline configuration
+data_source: toy
+data_dir: data/toy_scale_easy
 mu: 1.0
-
-# Reproducibility
 seed: 18
+threshold: 0.5
+mu_hat_mode: corrected         # "raw" or "corrected"
+interval_mode: symmetric       # "symmetric" or "free_form"
+nonconf_target: mu_hat         # "mu_hat" or "n_pred"
+output_dir: test_toy-scale-easy-{mu_hat_mode}-{interval_mode}-1000-test-2100-calib
+fit_parallel: false
+valid_size: 0.2
+calib_size: 0.5
 
-# Split settings
+# toy-specific
+n_test_experiments: 1000
 test_prefixes:
   - "7e39"
   - "6fcb"
-valid_size: 0.2
-calib_size: 0.5
-n_test_experiments: 1000
-
-# Classifier settings
-threshold: 0.5
-
-# Nonconformity score target: "mu_hat" or "n_pred"
-nonconf_target: "mu_hat"

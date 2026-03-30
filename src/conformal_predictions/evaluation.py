@@ -46,6 +46,7 @@ def inference_on_test_set(
     scaler: StandardScaler,
     test_data: Sequence[Tuple[np.ndarray, np.ndarray, dict]],
     threshold: float,
+    mu_hat_mode: str,
     ref_efficiencies_dict: Dict[str, Sequence[float]] = None,
     debug: bool = False,
 ) -> Tuple[
@@ -106,19 +107,22 @@ def inference_on_test_set(
 
             # counting metrics
             n_pred = int(np.sum(y_pred))
-
-            expected_signal = _get_expected_signal(
-                gamma_true, ref_efficiencies_dict[name][0]
-            )
-            expected_background = _get_expected_background(
-                beta_true, ref_efficiencies_dict[name][1]
-            )
-
-            mu_hat = (
-                (n_pred - expected_background) / expected_signal
-                if expected_signal > 0
-                else 0.0
-            )
+            if mu_hat_mode == "raw":
+                mu_hat = n_pred / gamma_true if gamma_true > 0 else 0.0
+            elif mu_hat_mode == "corrected":
+                expected_signal = _get_expected_signal(
+                    gamma_true, ref_efficiencies_dict[name][0]
+                )
+                expected_background = _get_expected_background(
+                    beta_true, ref_efficiencies_dict[name][1]
+                )
+                mu_hat = (
+                    (n_pred - expected_background) / expected_signal
+                    if expected_signal > 0
+                    else 0.0
+                )
+            else:
+                raise ValueError(f"Unknown mu_hat_mode: {mu_hat_mode}")
             mu_hat_test[name].append(mu_hat)
 
             if debug:
@@ -137,7 +141,7 @@ def compute_confidence_interval(
     y_pred,
     nonconf_scores_file: Path,
     model_name: str,
-    how: str,
+    interval_mode: str,
 ) -> Tuple[float, float]:
     """
     Compute confidence interval from calibration nonconformity scores.
@@ -146,7 +150,7 @@ def compute_confidence_interval(
         y_pred: Predicted value for which to compute the confidence interval
         nonconf_scores_file: Path to .npz file containing nonconformity scores
         model_name: Name of the model to extract scores for
-        how: Method used to get nonconformity scores ("diff" or "abs")
+        interval_mode: Interval construction mode ("symmetric" or "free_form")
     Returns:
         Tuple of (lower_bound, upper_bound) for the confidence interval
     """
@@ -156,12 +160,14 @@ def compute_confidence_interval(
 
     scores = data[model_name]
 
-    if how == "diff":
+    if interval_mode == "free_form":
         q_low = float(np.percentile(scores, 16))
         q_high = float(np.percentile(scores, 84))
-    elif how == "abs":
+    elif interval_mode == "symmetric":
         q_low = -np.percentile(scores, 68)
         q_high = np.percentile(scores, 68)
+    else:
+        raise ValueError(f"Unknown interval_mode: {interval_mode}")
 
     lower_bound = y_pred + q_low
     upper_bound = y_pred + q_high

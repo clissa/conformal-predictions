@@ -132,7 +132,7 @@ def _compute_mu_hat_confidence_bounds(
     gamma_true_values: Sequence[float],
     nonconf_scores_file: Path,
     model_name: str,
-    how: str,
+    interval_mode: str,
     nonconf_target: str,
 ) -> Tuple[np.ndarray, np.ndarray]:
     mu_hat_array = np.asarray(mu_hat_values, dtype=np.float64)
@@ -142,7 +142,7 @@ def _compute_mu_hat_confidence_bounds(
             mu_hat_array,
             nonconf_scores_file,
             model_name,
-            how=how,
+            interval_mode=interval_mode,
         )
         return np.asarray(lower, dtype=np.float64), np.asarray(upper, dtype=np.float64)
 
@@ -158,7 +158,7 @@ def _compute_mu_hat_confidence_bounds(
             n_pred_values,
             nonconf_scores_file,
             model_name,
-            how=how,
+            interval_mode=interval_mode,
         )
         return (
             np.asarray(n_lower, dtype=np.float64) / gamma_true_array,
@@ -176,6 +176,8 @@ def _build_experiment_rows(
     mu_true_values: Sequence[float],
     gamma_true_values: Sequence[float],
     metrics: Sequence[dict],
+    mu_hat_mode: str,
+    interval_mode: str,
 ) -> List[dict]:
     rows: List[dict] = []
     for experiment_idx, (
@@ -201,6 +203,8 @@ def _build_experiment_rows(
             "mu_hat_upper": float(upper),
             "mu_true": float(mu_true),
             "gamma_true": float(gamma_true),
+            "mu_hat_mode": mu_hat_mode,
+            "interval_mode": interval_mode,
             "contains_true": bool(lower < mu_true < upper),
         }
         if experiment_idx < len(metrics):
@@ -212,6 +216,8 @@ def _build_experiment_rows(
 def _build_performance_summary_rows(
     model_name: str,
     metrics: Sequence[dict],
+    mu_hat_mode: str,
+    interval_mode: str,
 ) -> List[dict]:
     if not metrics:
         return []
@@ -219,6 +225,8 @@ def _build_performance_summary_rows(
     metric_names = ("accuracy", "precision", "recall", "f1")
     summary = {
         "model": model_name,
+        "mu_hat_mode": mu_hat_mode,
+        "interval_mode": interval_mode,
         "n_test_blocks": len(metrics),
     }
     for metric_name in metric_names:
@@ -271,13 +279,18 @@ def main() -> None:
     test_data = _load_test_data(config)
     print(f"  Loaded {len(test_data)} test blocks")
 
-    print("\n[Running inference on test set...]")
+    print(
+        "\n[Running inference on test set "
+        f"(mu_hat_mode={config.mu_hat_mode}, "
+        f"interval_mode={config.interval_mode})...]"
+    )
     mu_hat_test, mu_true_list, gamma_true_list, performance_metrics = (
         inference_on_test_set(
             {model_name: model},
             scaler,
             test_data,
             config.threshold,
+            config.mu_hat_mode,
             {model_name: ref_efficiencies},
         )
     )
@@ -303,7 +316,7 @@ def main() -> None:
             gamma_true_list,
             nonconf_scores_file,
             current_model_name,
-            config.how,
+            config.interval_mode,
             config.nonconf_target,
         )
         empirical_coverage = compute_empirical_coverage(
@@ -330,7 +343,8 @@ def main() -> None:
             {
                 "model": current_model_name,
                 "nonconf_target": config.nonconf_target,
-                "how": config.how,
+                "mu_hat_mode": config.mu_hat_mode,
+                "interval_mode": config.interval_mode,
                 "n_test_blocks": len(mu_hat_values),
                 "empirical_coverage": float(empirical_coverage),
             }
@@ -344,12 +358,16 @@ def main() -> None:
                 mu_true_list,
                 gamma_true_list,
                 performance_metrics.get(current_model_name, []),
+                config.mu_hat_mode,
+                config.interval_mode,
             )
         )
         performance_summary_rows.extend(
             _build_performance_summary_rows(
                 current_model_name,
                 performance_metrics.get(current_model_name, []),
+                config.mu_hat_mode,
+                config.interval_mode,
             )
         )
 

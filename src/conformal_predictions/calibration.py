@@ -12,15 +12,14 @@ def _random_perturbation_for_numerical_stability() -> float:
     return np.random.normal(0, 1e-6)
 
 
-def _nonconformity_scores(pred, target, how: str) -> float:
-    """Compute nonconformity score.
-    Args: how: diff (target - pred) or abs_diff (|target - pred|)"""
-    if how == "diff":
+def _nonconformity_scores(pred, target, interval_mode: str) -> float:
+    """Compute a nonconformity score for the requested interval mode."""
+    if interval_mode == "free_form":
         score = target - pred
-    elif how == "abs":
+    elif interval_mode == "symmetric":
         score = abs(target - pred)
     else:
-        raise ValueError(f"Unknown how value: {how}")
+        raise ValueError(f"Unknown interval_mode: {interval_mode}")
     return score + _random_perturbation_for_numerical_stability()
 
 
@@ -41,9 +40,21 @@ def _get_expected_background(beta_true: int, eps_background: float) -> float:
 
 
 def _compute_mu_hat(
-    n_pred: int, meta: dict, ref_efficiencies: Sequence[float]
+    n_pred: int,
+    meta: dict,
+    mu_hat_mode: str,
+    ref_efficiencies: Optional[Sequence[float]] = None,
 ) -> float:
     gamma_true = _get_proportionate_gamma_true(meta)
+    if mu_hat_mode == "raw":
+        return n_pred / gamma_true if gamma_true > 0 else 0.0
+
+    if mu_hat_mode != "corrected":
+        raise ValueError(f"Unknown mu_hat_mode: {mu_hat_mode}")
+
+    if ref_efficiencies is None:
+        raise ValueError("ref_efficiencies are required for mu_hat_mode='corrected'")
+
     beta_true = _get_proportionate_beta_true(meta)
     expected_signal = _get_expected_signal(gamma_true, ref_efficiencies[0])
     expected_background = _get_expected_background(beta_true, ref_efficiencies[1])
@@ -61,7 +72,8 @@ def compute_nonconformity_scores(
     threshold: float,
     *,
     target: str = "mu_hat",  # can be "n_pred" or "mu_hat",
-    how: str,  # method for computing nonconformity scores: "diff" or "abs"
+    interval_mode: str,
+    mu_hat_mode: str,
     ref_efficiencies: Optional[Sequence[float]] = None,
 ) -> Dict[str, List[int]]:
     scores: Dict[str, List[int]] = {name: [] for name in models}
@@ -77,11 +89,18 @@ def compute_nonconformity_scores(
             n_pred = int(np.sum(y_pred_proba > threshold))
             if target == "mu_hat":
                 mu_true = _meta["mu_true"]
-                mu_hat = _compute_mu_hat(n_pred, _meta, ref_efficiencies)
-                scores[name].append(_nonconformity_scores(mu_hat, mu_true, how=how))
+                mu_hat = _compute_mu_hat(
+                    n_pred,
+                    _meta,
+                    mu_hat_mode,
+                    ref_efficiencies,
+                )
+                scores[name].append(
+                    _nonconformity_scores(mu_hat, mu_true, interval_mode)
+                )
             elif target == "n_pred":
                 n_obs = int(np.sum(y_calib))
-                scores[name].append(_nonconformity_scores(n_pred, n_obs, how=how))
+                scores[name].append(_nonconformity_scores(n_pred, n_obs, interval_mode))
     return scores
 
 
@@ -91,6 +110,7 @@ def compute_mu_hat(
     calib_data: Sequence[Tuple[np.ndarray, np.ndarray]],
     calib_meta: Sequence[dict],
     threshold: float,
+    mu_hat_mode: str,
     ref_efficiencies: Sequence[float],
 ) -> Tuple[Dict[str, List[float]], Dict[str, Dict[str, float]]]:
     mu_hat: Dict[str, List[float]] = {name: [] for name in models}
@@ -102,7 +122,12 @@ def compute_mu_hat(
         for name, model in models.items():
             y_pred_proba = model.predict_proba(X_calib)[:, 1]
             n_pred = int(np.sum(y_pred_proba > threshold))
-            mu_pred = _compute_mu_hat(n_pred, meta, ref_efficiencies)
+            mu_pred = _compute_mu_hat(
+                n_pred,
+                meta,
+                mu_hat_mode,
+                ref_efficiencies,
+            )
             mu_hat[name].append(mu_pred)
 
     stats: Dict[str, Dict[str, float]] = {}

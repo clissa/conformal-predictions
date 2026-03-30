@@ -19,7 +19,8 @@ class PipelineConfig:
     mu: float = 1.0
     seed: int = 18
     threshold: float = 0.5
-    how: str = "abs"  # "diff" or "abs"
+    mu_hat_mode: str = "corrected"  # "raw" or "corrected"
+    interval_mode: str = "symmetric"  # "symmetric" or "free_form"
     nonconf_target: str = "mu_hat"  # "mu_hat" or "n_pred"
     output_dir: str = "results"
     fit_parallel: bool = False
@@ -50,10 +51,14 @@ class PipelineConfig:
 
     @property
     def pred_formula(self) -> str:
-        return (
-            r"$\hat{\mu} = \frac{n_{pred} - \epsilon_{bkg}\beta^*_{true}}"
-            r"{\epsilon_{sig}\gamma^*_{true}}$"
-        )
+        if self.mu_hat_mode == "raw":
+            return r"$\hat{\mu} = \frac{n_{pred}}{\gamma^*_{true}}$"
+        if self.mu_hat_mode == "corrected":
+            return (
+                r"$\hat{\mu} = \frac{n_{pred} - \epsilon_{bkg}\beta^*_{true}}"
+                r"{\epsilon_{sig}\gamma^*_{true}}$"
+            )
+        raise ValueError(f"Unknown mu_hat_mode: {self.mu_hat_mode!r}")
 
 
 def _resolve_output_dir_template(raw: Dict[str, Any]) -> None:
@@ -72,11 +77,21 @@ def _resolve_output_dir_template(raw: Dict[str, Any]) -> None:
         ) from exc
 
 
+def _validate_choice(raw: Dict[str, Any], key: str, allowed: tuple[str, ...]) -> None:
+    value = raw.get(key)
+    if value not in allowed:
+        allowed_str = ", ".join(repr(option) for option in allowed)
+        raise ValueError(f"Invalid {key}={value!r}. Expected one of: {allowed_str}.")
+
+
 def load_config(path: str | Path) -> PipelineConfig:
     """Load a YAML config file and return a *PipelineConfig* instance."""
     path = Path(path)
     with open(path) as fh:
         raw = yaml.safe_load(fh)
+
+    _validate_choice(raw, "mu_hat_mode", ("raw", "corrected"))
+    _validate_choice(raw, "interval_mode", ("symmetric", "free_form"))
 
     _resolve_output_dir_template(raw)
 

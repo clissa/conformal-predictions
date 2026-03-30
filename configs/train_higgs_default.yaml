@@ -1,34 +1,19 @@
-# Training configuration for Higgs ML dataset
-# Legacy example config retained for reference during the unified-script migration
-
-# Output directory name (used under results/)
-output_dirname: "higgs-sequential-q68-10train-10valid-10ref-10calib-10test"
-
-# Method for computing nonconformity scores: "diff" or "abs"
-how: "abs"
-
-# Whether to fit models in parallel using joblib
-fit_parallel: false
-
-# Data settings
-data_dir: "data/HiggsML/input_data/train"
+# HiggsML pipeline configuration
+data_source: higgs
+data_dir: data/HiggsML/input_data/train
 mu: 1.0
-
-# Reproducibility
 seed: 18
-
-# Split sizes (number of parquet row groups)
-train_size: 10
-valid_size: 10
-ref_size: 10
-calib_size: 10
-test_size: 10
-
-# Classifier settings
 threshold: 0.5
+mu_hat_mode: corrected         # "raw" or "corrected"
+interval_mode: symmetric       # "symmetric" or "free_form"
+nonconf_target: mu_hat         # "mu_hat" or "n_pred"
+output_dir: higgs-{mu_hat_mode}-{interval_mode}-{train_size}train-{valid_size}valid-{ref_size}ref-{calib_size}calib-{test_size}test
+fit_parallel: false
+valid_size: 10
+calib_size: 10
 
-# Block size for pseudo-experiments (number of events per block)
+# higgs-specific
+train_size: 10
+ref_size: 10
+test_size: 10
 block_size: 10000
-
-# Nonconformity score target: "mu_hat" or "n_pred"
-nonconf_target: "mu_hat"

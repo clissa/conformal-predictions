@@ -4,9 +4,10 @@ data_dir: data/HiggsML/input_data/train
 mu: 1.0
 seed: 20260330
 threshold: 0.5
-how: abs                        # "diff" or "abs"
+mu_hat_mode: corrected          # "raw" or "corrected"
+interval_mode: free_form        # "symmetric" or "free_form"
 nonconf_target: mu_hat          # "mu_hat" or "n_pred"
-output_dir: higgs-{how}-{train_size}train-{valid_size}valid-{ref_size}ref-{calib_size}calib-{test_size}test
+output_dir: higgs-{mu_hat_mode}-{interval_mode}-{train_size}train-{valid_size}valid-{ref_size}ref-{calib_size}calib-{test_size}test
 fit_parallel: false
 valid_size: 5
 calib_size: 10

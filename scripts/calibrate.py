@@ -149,7 +149,9 @@ def main() -> None:
     # ---- 3. Nonconformity scores ----
     print(
         f"\n[Computing nonconformity scores "
-        f"(target={config.nonconf_target}, how={config.how})...]"
+        f"(target={config.nonconf_target}, "
+        f"mu_hat_mode={config.mu_hat_mode}, "
+        f"interval_mode={config.interval_mode})...]"
     )
     nonconf_scores = compute_nonconformity_scores(
         models,
@@ -158,7 +160,8 @@ def main() -> None:
         calib_meta,
         config.threshold,
         target=config.nonconf_target,
-        how=config.how,
+        interval_mode=config.interval_mode,
+        mu_hat_mode=config.mu_hat_mode,
         ref_efficiencies=ref_efficiencies,
     )
 
@@ -168,13 +171,17 @@ def main() -> None:
         print(f"  {name} — mean: {mean_score:.4f} ± {std_score:.4f}")
 
     # ---- 4. μ̂ distribution ----
-    print("\n[Computing μ̂ distribution on calibration set...]")
+    print(
+        "\n[Computing μ̂ distribution on calibration set "
+        f"(mu_hat_mode={config.mu_hat_mode})...]"
+    )
     mu_hat, stats = compute_mu_hat(
         models,
         scaler,
         calib_data,
         calib_meta,
         config.threshold,
+        config.mu_hat_mode,
         ref_efficiencies=ref_efficiencies,
     )
 
@@ -206,7 +213,18 @@ def main() -> None:
     )
 
     if stats:
-        df_stats = pd.DataFrame([{"Model": name, **s} for name, s in stats.items()])
+        df_stats = pd.DataFrame(
+            [
+                {
+                    "Model": name,
+                    "mu_hat_mode": config.mu_hat_mode,
+                    "interval_mode": config.interval_mode,
+                    "nonconf_target": config.nonconf_target,
+                    **s,
+                }
+                for name, s in stats.items()
+            ]
+        )
         df_stats.to_csv(stats_dir / "mu_hat_calibration_stats.csv", index=False)
         print("\nStatistics Summary:")
         print(df_stats.to_string(index=False))
