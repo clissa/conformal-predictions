@@ -128,40 +128,41 @@ def plot_nonconformity_scores(
         )
         plt.close()
 
-    fig, axs = plt.subplots(len(model_names), 1, figsize=(10, 5 * len(model_names)))
-    if len(model_names) == 1:
-        axs = [axs]
+    if len(model_names) > 1:
+        fig, axs = plt.subplots(len(model_names), 1, figsize=(10, 5 * len(model_names)))
+        if len(model_names) == 1:
+            axs = [axs]
 
-    colors = ["blue", "green", "red"]
-    for i, model_name in enumerate(model_names):
-        scores = nonconf_scores[model_name]
-        bin_width = 1
-        axs[i].hist(
-            scores,
-            bins=np.arange(min(scores), max(scores) + bin_width, bin_width),
-            alpha=0.7,
-            color=colors[i % len(colors)],
-            density=True,
+        colors = ["blue", "green", "red"]
+        for i, model_name in enumerate(model_names):
+            scores = nonconf_scores[model_name]
+            bin_width = 1
+            axs[i].hist(
+                scores,
+                bins=np.arange(min(scores), max(scores) + bin_width, bin_width),
+                alpha=0.7,
+                color=colors[i % len(colors)],
+                density=True,
+            )
+
+            if len(scores) > 1:
+                density = gaussian_kde(scores)
+                xs = np.linspace(min(scores), max(scores), 200)
+                axs[i].plot(xs, density(xs), "k-", linewidth=2, label="KDE")
+
+            axs[i].set_title(f"{model_name}")
+            axs[i].set_xlabel(f"Nonconformity Score ({scores_label})")
+            axs[i].set_ylabel("Density")
+            axs[i].legend()
+            axs[i].grid(alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(
+            output_dir / f"{scores_label}_scores_distribution_comparison.png",
+            dpi=300,
+            bbox_inches="tight",
         )
-
-        if len(scores) > 1:
-            density = gaussian_kde(scores)
-            xs = np.linspace(min(scores), max(scores), 200)
-            axs[i].plot(xs, density(xs), "k-", linewidth=2, label="KDE")
-
-        axs[i].set_title(f"{model_name}")
-        axs[i].set_xlabel(f"Nonconformity Score ({scores_label})")
-        axs[i].set_ylabel("Density")
-        axs[i].legend()
-        axs[i].grid(alpha=0.3)
-
-    plt.tight_layout()
-    plt.savefig(
-        output_dir / f"{scores_label}_scores_distribution_comparison.png",
-        dpi=300,
-        bbox_inches="tight",
-    )
-    plt.close()
+        plt.close()
 
 
 def plot_CI(

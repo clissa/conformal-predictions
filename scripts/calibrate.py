@@ -25,6 +25,10 @@ from conformal_predictions.calibration import (
 from conformal_predictions.config import PipelineConfig, load_config
 from conformal_predictions.data.higgs import load_calib as higgs_load_calib
 from conformal_predictions.data.toy import list_split_files, load_pseudo_experiment
+from conformal_predictions.data_viz import (
+    plot_mu_hat_distribution,
+    plot_nonconformity_scores,
+)
 from conformal_predictions.models import load_model
 from conformal_predictions.preprocessing import load_scaler
 from conformal_predictions.reference import load_efficiencies
@@ -108,7 +112,9 @@ def main() -> None:
     model_name = _MODEL_CLI_MAP[args.model]
 
     artifacts_dir = Path("results") / config.output_dir / "artifacts"
+    plots_dir = config.plots_dir
     stats_dir = config.stats_dir
+    plots_dir.mkdir(parents=True, exist_ok=True)
     stats_dir.mkdir(parents=True, exist_ok=True)
 
     np.random.seed(config.seed)
@@ -171,6 +177,20 @@ def main() -> None:
         config.threshold,
         ref_efficiencies=ref_efficiencies,
     )
+
+    print(f"\n[Saving calibration plots to {plots_dir}...]")
+    plot_nonconformity_scores(
+        nonconf_scores,
+        config.nonconf_target,
+        output_dir=plots_dir,
+    )
+    if stats:
+        plot_mu_hat_distribution(
+            mu_hat,
+            stats,
+            output_dir=plots_dir,
+            pred_formula=config.pred_formula,
+        )
 
     # ---- 5. Save artifacts ----
     print(f"\n[Saving calibration artifacts to {stats_dir}...]")

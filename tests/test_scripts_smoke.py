@@ -395,13 +395,36 @@ def test_calibrate_command_smoke(tmp_path, monkeypatch):
             },
         ),
     )
+    monkeypatch.setattr(
+        module,
+        "plot_nonconformity_scores",
+        lambda _scores, _label, output_dir: (
+            output_dir.mkdir(parents=True, exist_ok=True),
+            (output_dir / "mu_hat_scores_distribution_GLM.png").write_text("plot"),
+            (output_dir / "mu_hat_scores_distribution_comparison.png").write_text(
+                "plot"
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "plot_mu_hat_distribution",
+        lambda _mu_hat, _stats, output_dir, pred_formula: (
+            output_dir.mkdir(parents=True, exist_ok=True),
+            (output_dir / "mu_hat_distribution_GLM.png").write_text("plot"),
+        ),
+    )
 
     module.main()
 
     stats_dir = tmp_path / "results" / "calibrate-smoke" / "stats"
+    plots_dir = tmp_path / "results" / "calibrate-smoke" / "plots"
     assert (stats_dir / "mu_hat_nonconf_scores.npz").exists()
     assert (stats_dir / "mu_hat_calib_distribution.npz").exists()
     assert (stats_dir / "mu_hat_calibration_stats.csv").exists()
+    assert (plots_dir / "mu_hat_scores_distribution_GLM.png").exists()
+    assert (plots_dir / "mu_hat_scores_distribution_comparison.png").exists()
+    assert (plots_dir / "mu_hat_distribution_GLM.png").exists()
 
 
 def test_evaluate_command_smoke(tmp_path, monkeypatch):
