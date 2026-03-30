@@ -56,11 +56,29 @@ class PipelineConfig:
         )
 
 
+def _resolve_output_dir_template(raw: Dict[str, Any]) -> None:
+    """Format ``output_dir`` with values from the same YAML mapping."""
+    output_dir = raw.get("output_dir")
+    if not isinstance(output_dir, str) or "{" not in output_dir:
+        return
+
+    try:
+        raw["output_dir"] = output_dir.format(**raw)
+    except KeyError as exc:
+        missing_key = exc.args[0]
+        raise ValueError(
+            f"Unknown output_dir placeholder '{missing_key}' in config template: "
+            f"{output_dir!r}"
+        ) from exc
+
+
 def load_config(path: str | Path) -> PipelineConfig:
     """Load a YAML config file and return a *PipelineConfig* instance."""
     path = Path(path)
     with open(path) as fh:
         raw = yaml.safe_load(fh)
+
+    _resolve_output_dir_template(raw)
 
     # Convert data_dir string to Path
     if "data_dir" in raw:

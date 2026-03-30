@@ -6,13 +6,13 @@ seed: 20260330
 threshold: 0.5
 how: abs                        # "diff" or "abs"
 nonconf_target: mu_hat          # "mu_hat" or "n_pred"
-output_dir: higgs-q68-1train-1valid-1ref-1calib-1test
+output_dir: higgs-{how}-{train_size}train-{valid_size}valid-{ref_size}ref-{calib_size}calib-{test_size}test
 fit_parallel: false
-valid_size: 1
-calib_size: 1
+valid_size: 5
+calib_size: 10
 
 # higgs-specific
-train_size: 1
-ref_size: 1
-test_size: 1
-block_size: 1000
+train_size: 10
+ref_size: 2
+test_size: 10
+block_size: 10000

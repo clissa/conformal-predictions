@@ -8,7 +8,9 @@ from types import ModuleType
 
 import numpy as np
 
-from conformal_predictions.config import PipelineConfig
+import pytest
+
+from conformal_predictions.config import PipelineConfig, load_config
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
@@ -94,6 +96,47 @@ block_size: 2
 """
     )
     return path
+
+
+def test_load_config_formats_output_dir_template(tmp_path):
+    config_path = tmp_path / "templated_config.yaml"
+    config_path.write_text(
+        """\
+data_source: higgs
+data_dir: data/HiggsML/input_data/train
+mu: 1.0
+seed: 18
+threshold: 0.5
+how: abs
+nonconf_target: mu_hat
+output_dir: higgs-{how}-{train_size}train-{valid_size}valid-{ref_size}ref-{calib_size}calib-{test_size}test
+fit_parallel: false
+valid_size: 5
+calib_size: 10
+train_size: 10
+ref_size: 2
+test_size: 10
+block_size: 10000
+"""
+    )
+
+    config = load_config(config_path)
+
+    assert config.output_dir == "higgs-abs-10train-5valid-2ref-10calib-10test"
+
+
+def test_load_config_rejects_unknown_output_dir_template_key(tmp_path):
+    config_path = tmp_path / "invalid_templated_config.yaml"
+    config_path.write_text(
+        """\
+data_source: higgs
+data_dir: data/HiggsML/input_data/train
+output_dir: higgs-{missing_key}
+"""
+    )
+
+    with pytest.raises(ValueError, match="Unknown output_dir placeholder 'missing_key'"):
+        load_config(config_path)
 
 
 def test_generate_single_smoke(tmp_path, monkeypatch):
