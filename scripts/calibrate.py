@@ -112,8 +112,8 @@ def main() -> None:
     model_name = _MODEL_CLI_MAP[args.model]
 
     artifacts_dir = Path("results") / config.output_dir / "artifacts"
-    plots_dir = config.plots_dir
-    stats_dir = config.stats_dir
+    plots_dir = config.plots_dir / model_name
+    stats_dir = config.stats_dir / model_name
     plots_dir.mkdir(parents=True, exist_ok=True)
     stats_dir.mkdir(parents=True, exist_ok=True)
 

@@ -460,8 +460,8 @@ def test_calibrate_command_smoke(tmp_path, monkeypatch):
 
     module.main()
 
-    stats_dir = tmp_path / "results" / "calibrate-smoke" / "stats"
-    plots_dir = tmp_path / "results" / "calibrate-smoke" / "plots"
+    stats_dir = tmp_path / "results" / "calibrate-smoke" / "stats" / "GLM"
+    plots_dir = tmp_path / "results" / "calibrate-smoke" / "plots" / "GLM"
     assert (stats_dir / "mu_hat_nonconf_scores.npz").exists()
     assert (stats_dir / "mu_hat_calib_distribution.npz").exists()
     assert (stats_dir / "mu_hat_calibration_stats.csv").exists()
@@ -488,8 +488,8 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
     )
 
     artifacts_dir = tmp_path / "results" / "eval-smoke" / "artifacts"
-    stats_dir = tmp_path / "results" / "eval-smoke" / "stats"
-    plots_dir = tmp_path / "results" / "eval-smoke" / "plots"
+    stats_dir = tmp_path / "results" / "eval-smoke" / "stats" / "GLM"
+    plots_dir = tmp_path / "results" / "eval-smoke" / "plots" / "GLM"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     stats_dir.mkdir(parents=True, exist_ok=True)
     plots_dir.mkdir(parents=True, exist_ok=True)
