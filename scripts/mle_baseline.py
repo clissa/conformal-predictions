@@ -38,6 +38,24 @@ _MODEL_CLI_MAP = {
 }
 
 
+def _build_mle_output_root(config: PipelineConfig) -> Path:
+    if config.data_source == "higgs":
+        run_name = (
+            f"higgs-{config.train_size}train-{config.valid_size}valid-"
+            f"{config.ref_size}ref-{config.calib_size}calib-{config.test_size}test"
+        )
+    elif config.data_source == "toy":
+        dataset_name = config.data_dir.name or "toy"
+        run_name = (
+            f"toy-{dataset_name}-{config.n_test_experiments}test-"
+            f"{config.calib_size}calib"
+        )
+    else:
+        raise ValueError(f"Unknown data_source: {config.data_source!r}")
+
+    return Path("results") / run_name / "mle_baseline"
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run test inference and MLE-baseline interval evaluation."
@@ -207,14 +225,12 @@ def _run_mle_baseline_on_test_set(
 def _build_performance_summary_row(
     model_name: str,
     metrics: Sequence[dict],
-    mu_hat_mode: str,
     alpha: float,
     confidence_level: float,
     kind: str,
 ) -> dict:
     summary = {
         "model": model_name,
-        "mu_hat_mode": mu_hat_mode,
         "mle_kind": kind,
         "alpha": alpha,
         "confidence_level": confidence_level,
@@ -243,8 +259,9 @@ def main() -> None:
     model_name = _MODEL_CLI_MAP[args.model]
 
     artifacts_dir = Path("results") / config.output_dir / "artifacts"
-    plots_dir = config.plots_dir / model_name / "mle_baseline" / args.kind
-    stats_dir = config.stats_dir / model_name / "mle_baseline" / args.kind
+    mle_output_root = _build_mle_output_root(config)
+    plots_dir = mle_output_root / "plots" / model_name / args.kind
+    stats_dir = mle_output_root / "stats" / model_name / args.kind
     plots_dir.mkdir(parents=True, exist_ok=True)
     stats_dir.mkdir(parents=True, exist_ok=True)
 
@@ -273,10 +290,7 @@ def main() -> None:
     test_data = _load_test_data(config)
     print(f"  Loaded {len(test_data)} test blocks")
 
-    print(
-        "\n[Running MLE baseline on test set "
-        f"(mu_hat_mode={config.mu_hat_mode}, kind={args.kind})...]"
-    )
+    print(f"\n[Running MLE baseline on test set (kind={args.kind})...]")
     experiment_rows, performance_metrics = _run_mle_baseline_on_test_set(
         model,
         scaler,
@@ -318,7 +332,6 @@ def main() -> None:
         [
             {
                 "model": model_name,
-                "mu_hat_mode": config.mu_hat_mode,
                 "mle_kind": args.kind,
                 "alpha": config.resolved_alpha,
                 "confidence_level": config.confidence_level,
@@ -332,7 +345,6 @@ def main() -> None:
         [
             {
                 "model": model_name,
-                "mu_hat_mode": config.mu_hat_mode,
                 "mle_kind": args.kind,
                 **row,
             }
@@ -345,7 +357,6 @@ def main() -> None:
             _build_performance_summary_row(
                 model_name,
                 performance_metrics,
-                config.mu_hat_mode,
                 config.resolved_alpha,
                 config.confidence_level,
                 args.kind,

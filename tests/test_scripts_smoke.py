@@ -891,19 +891,19 @@ def test_mle_baseline_command_smoke(tmp_path, monkeypatch):
     stats_dir = (
         tmp_path
         / "results"
-        / "mle-baseline-smoke"
+        / "toy-data-1test-0.5calib"
+        / "mle_baseline"
         / "stats"
         / "GLM"
-        / "mle_baseline"
         / "wald"
     )
     plots_dir = (
         tmp_path
         / "results"
-        / "mle-baseline-smoke"
+        / "toy-data-1test-0.5calib"
+        / "mle_baseline"
         / "plots"
         / "GLM"
-        / "mle_baseline"
         / "wald"
     )
     artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -997,7 +997,6 @@ def test_mle_baseline_command_smoke(tmp_path, monkeypatch):
         rows = list(csv.DictReader(fh))
     assert len(rows) == 1
     assert rows[0]["model"] == "GLM"
-    assert rows[0]["mu_hat_mode"] == "mle"
     assert rows[0]["mle_kind"] == "wald"
     assert float(rows[0]["empirical_coverage"]) == 1.0
 
@@ -1016,7 +1015,6 @@ def test_mle_baseline_command_smoke(tmp_path, monkeypatch):
         rows = list(csv.DictReader(fh))
     assert len(rows) == 1
     assert rows[0]["model"] == "GLM"
-    assert rows[0]["mu_hat_mode"] == "mle"
     assert rows[0]["mle_kind"] == "wald"
     assert rows[0]["n_test_blocks"] == "1"
     assert float(rows[0]["accuracy_mean"]) == 1.0
