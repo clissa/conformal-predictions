@@ -109,7 +109,7 @@ def inference_on_test_set(
             n_pred = int(np.sum(y_pred))
             if mu_hat_mode == "raw":
                 mu_hat = n_pred / gamma_true if gamma_true > 0 else 0.0
-            elif mu_hat_mode == "corrected":
+            elif mu_hat_mode == "mle":
                 expected_signal = _get_expected_signal(
                     gamma_true, ref_efficiencies_dict[name][0]
                 )

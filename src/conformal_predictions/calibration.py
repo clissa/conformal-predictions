@@ -49,11 +49,11 @@ def _compute_mu_hat(
     if mu_hat_mode == "raw":
         return n_pred / gamma_true if gamma_true > 0 else 0.0
 
-    if mu_hat_mode != "corrected":
+    if mu_hat_mode != "mle":
         raise ValueError(f"Unknown mu_hat_mode: {mu_hat_mode}")
 
     if ref_efficiencies is None:
-        raise ValueError("ref_efficiencies are required for mu_hat_mode='corrected'")
+        raise ValueError("ref_efficiencies are required for mu_hat_mode='mle'")
 
     beta_true = _get_proportionate_beta_true(meta)
     expected_signal = _get_expected_signal(gamma_true, ref_efficiencies[0])

@@ -4,7 +4,7 @@ data_dir: data/HiggsML/input_data/train
 mu: 1.0
 seed: 18
 threshold: 0.5
-mu_hat_mode: corrected         # "raw" or "corrected"
+mu_hat_mode: mle               # "raw" or "mle"
 interval_mode: symmetric       # "symmetric" or "free_form"
 nonconf_target: mu_hat         # "mu_hat" or "n_pred"
 output_dir: higgs-{mu_hat_mode}-{interval_mode}-{train_size}train-{valid_size}valid-{ref_size}ref-{calib_size}calib-{test_size}test

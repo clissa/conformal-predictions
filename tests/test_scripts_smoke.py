@@ -14,6 +14,7 @@ import pytest
 from conformal_predictions.calibration import _compute_mu_hat
 from conformal_predictions.config import PipelineConfig, load_config
 from conformal_predictions.evaluation import compute_confidence_interval
+from conformal_predictions.mle import compute_mle_interval
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
@@ -83,7 +84,7 @@ data_dir: {path.parent / "data"}
 mu: 1.0
 seed: 18
 threshold: 0.5
-mu_hat_mode: corrected
+mu_hat_mode: mle
 interval_mode: symmetric
 nonconf_target: {nonconf_target}
 output_dir: {output_dir}
@@ -111,7 +112,7 @@ data_dir: data/HiggsML/input_data/train
 mu: 1.0
 seed: 18
 threshold: 0.5
-mu_hat_mode: corrected
+mu_hat_mode: mle
 interval_mode: symmetric
 nonconf_target: mu_hat
 output_dir: higgs-{mu_hat_mode}-{interval_mode}-{train_size}train-{valid_size}valid-{ref_size}ref-{calib_size}calib-{test_size}test
@@ -129,7 +130,7 @@ block_size: 10000
 
     assert (
         config.output_dir
-        == "higgs-corrected-symmetric-10train-5valid-2ref-10calib-10test"
+        == "higgs-mle-symmetric-10train-5valid-2ref-10calib-10test"
     )
     assert config.n_sigma == pytest.approx(1.0)
     assert config.resolved_alpha == pytest.approx(
@@ -144,7 +145,7 @@ def test_load_config_rejects_unknown_output_dir_template_key(tmp_path):
         """\
 data_source: higgs
 data_dir: data/HiggsML/input_data/train
-mu_hat_mode: corrected
+mu_hat_mode: mle
 interval_mode: symmetric
 output_dir: higgs-{missing_key}
 """
@@ -176,7 +177,7 @@ def test_load_config_rejects_invalid_interval_mode(tmp_path):
         """\
 data_source: toy
 data_dir: data/toy_scale_easy
-mu_hat_mode: corrected
+mu_hat_mode: mle
 interval_mode: invalid
 output_dir: test-output
 """
@@ -192,7 +193,7 @@ def test_load_config_accepts_explicit_alpha(tmp_path):
         """\
 data_source: toy
 data_dir: data/toy_scale_easy
-mu_hat_mode: corrected
+mu_hat_mode: mle
 interval_mode: symmetric
 alpha: 0.2
 output_dir: test-output
@@ -213,7 +214,7 @@ def test_load_config_accepts_explicit_n_sigma(tmp_path):
         """\
 data_source: toy
 data_dir: data/toy_scale_easy
-mu_hat_mode: corrected
+mu_hat_mode: mle
 interval_mode: symmetric
 n_sigma: 2.0
 output_dir: test-output
@@ -235,7 +236,7 @@ def test_load_config_rejects_alpha_and_n_sigma_together(tmp_path):
         """\
 data_source: toy
 data_dir: data/toy_scale_easy
-mu_hat_mode: corrected
+mu_hat_mode: mle
 interval_mode: symmetric
 alpha: 0.2
 n_sigma: 1.0
@@ -263,7 +264,7 @@ def test_load_config_rejects_invalid_confidence_settings(
         f"""\
 data_source: toy
 data_dir: data/toy_scale_easy
-mu_hat_mode: corrected
+mu_hat_mode: mle
 interval_mode: symmetric
 {field}: {value}
 output_dir: test-output
@@ -274,7 +275,7 @@ output_dir: test-output
         load_config(config_path)
 
 
-def test_compute_mu_hat_supports_raw_and_corrected_modes():
+def test_compute_mu_hat_supports_raw_and_mle_modes():
     meta = {
         "gamma_true": 10.0,
         "beta_true": 20.0,
@@ -283,10 +284,23 @@ def test_compute_mu_hat_supports_raw_and_corrected_modes():
     }
 
     raw_mu_hat = _compute_mu_hat(1, meta, "raw")
-    corrected_mu_hat = _compute_mu_hat(1, meta, "corrected", (1.0, 1.0))
+    mle_mu_hat = _compute_mu_hat(1, meta, "mle", (1.0, 1.0))
 
     assert raw_mu_hat == pytest.approx(1.0)
-    assert corrected_mu_hat == pytest.approx(-1.0)
+    assert mle_mu_hat == pytest.approx(-1.0)
+
+
+@pytest.mark.parametrize("kind", ["wald", "profile", "exact"])
+def test_compute_mle_interval_supports_all_kinds(kind):
+    lower, upper = compute_mle_interval(5, 2.0, 1.0, 0.2, kind=kind)
+
+    assert lower < upper
+    assert lower <= 2.0 <= upper
+
+
+def test_compute_mle_interval_rejects_unknown_kind():
+    with pytest.raises(ValueError, match="Unknown MLE interval kind"):
+        compute_mle_interval(5, 2.0, 1.0, 0.2, kind="unknown")
 
 
 def test_compute_confidence_interval_supports_new_interval_modes(tmp_path):
@@ -733,7 +747,7 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
         assert list(models.keys()) == ["GLM"]
         assert isinstance(scaler, _IdentityScaler)
         assert threshold == 0.5
-        assert mu_hat_mode == "corrected"
+        assert mu_hat_mode == "mle"
         assert ref_efficiencies_dict == {"GLM": (1.0, 1.0)}
         assert debug is False
         assert len(test_data) == 1
@@ -808,7 +822,7 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
     assert len(rows) == 1
     assert rows[0]["model"] == "GLM"
     assert rows[0]["nonconf_target"] == "n_pred"
-    assert rows[0]["mu_hat_mode"] == "corrected"
+    assert rows[0]["mu_hat_mode"] == "mle"
     assert rows[0]["interval_mode"] == "symmetric"
     assert float(rows[0]["alpha"]) == pytest.approx(1.0 - math.erf(1.0 / math.sqrt(2.0)))
     assert float(rows[0]["confidence_level"]) == pytest.approx(
@@ -823,7 +837,7 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
     assert float(rows[0]["mu_hat"]) == 1.0
     assert float(rows[0]["mu_hat_lower"]) == 0.8
     assert float(rows[0]["mu_hat_upper"]) == 1.2
-    assert rows[0]["mu_hat_mode"] == "corrected"
+    assert rows[0]["mu_hat_mode"] == "mle"
     assert rows[0]["interval_mode"] == "symmetric"
     assert float(rows[0]["alpha"]) == pytest.approx(1.0 - math.erf(1.0 / math.sqrt(2.0)))
     assert float(rows[0]["confidence_level"]) == pytest.approx(
@@ -835,7 +849,7 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
         rows = list(csv.DictReader(fh))
     assert len(rows) == 1
     assert rows[0]["model"] == "GLM"
-    assert rows[0]["mu_hat_mode"] == "corrected"
+    assert rows[0]["mu_hat_mode"] == "mle"
     assert rows[0]["interval_mode"] == "symmetric"
     assert float(rows[0]["alpha"]) == pytest.approx(1.0 - math.erf(1.0 / math.sqrt(2.0)))
     assert float(rows[0]["confidence_level"]) == pytest.approx(
@@ -846,6 +860,166 @@ def test_evaluate_command_smoke(tmp_path, monkeypatch):
     assert float(rows[0]["precision_mean"]) == 1.0
     assert float(rows[0]["recall_mean"]) == 1.0
     assert float(rows[0]["f1_mean"]) == 1.0
+
+
+def test_mle_baseline_command_smoke(tmp_path, monkeypatch):
+    module = _load_script_module(
+        "script_mle_baseline_smoke",
+        SCRIPTS_DIR / "mle_baseline.py",
+    )
+
+    config_path = _write_pipeline_config(
+        tmp_path / "mle_baseline_config.yaml",
+        output_dir="mle-baseline-smoke",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "mle_baseline.py",
+            "--config",
+            str(config_path),
+            "--model",
+            "GLM",
+            "--kind",
+            "wald",
+        ],
+    )
+
+    artifacts_dir = tmp_path / "results" / "mle-baseline-smoke" / "artifacts"
+    stats_dir = (
+        tmp_path
+        / "results"
+        / "mle-baseline-smoke"
+        / "stats"
+        / "GLM"
+        / "mle_baseline"
+        / "wald"
+    )
+    plots_dir = (
+        tmp_path
+        / "results"
+        / "mle-baseline-smoke"
+        / "plots"
+        / "GLM"
+        / "mle_baseline"
+        / "wald"
+    )
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    stats_dir.mkdir(parents=True, exist_ok=True)
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    (artifacts_dir / "GLM.joblib").write_text("placeholder")
+    (artifacts_dir / "scaler.joblib").write_text("placeholder")
+    (artifacts_dir / "reference_efficiencies.json").write_text("{}")
+
+    train_file = tmp_path / "train.npz"
+    val_file = tmp_path / "val.npz"
+    calib_file = tmp_path / "calib.npz"
+    test_file = tmp_path / "test.npz"
+
+    monkeypatch.setattr(
+        module,
+        "list_split_files",
+        lambda *_args, **_kwargs: (
+            [train_file],
+            [val_file],
+            [calib_file],
+            [test_file],
+        ),
+    )
+
+    def fake_load_pseudo_experiment(path: Path):
+        assert path == test_file
+        X = np.array([[0.1, 0.9], [0.9, 0.1]], dtype=np.float32)
+        y = np.array([1, 0], dtype=np.int64)
+        meta = {
+            "mu_true": 1.0,
+            "gamma_true": 10.0,
+            "beta_true": 20.0,
+            "nu_expected": 30.0,
+            "n_total": 2,
+        }
+        return X, y, meta
+
+    monkeypatch.setattr(module, "load_pseudo_experiment", fake_load_pseudo_experiment)
+    monkeypatch.setattr(module, "load_model", lambda *_a, **_k: _DummyModel())
+    monkeypatch.setattr(module, "load_scaler", lambda *_a, **_k: _IdentityScaler())
+    monkeypatch.setattr(
+        module,
+        "load_efficiencies",
+        lambda *_a, **_k: {"GLM": (1.0, 1.0)},
+    )
+    monkeypatch.setattr(
+        module,
+        "compute_mle_interval",
+        lambda n_obs, s, b, alpha, *, kind: (0.8, 1.2),
+    )
+
+    def fake_plot_confidence_intervals(
+        mu_hat_values,
+        mu_hat_lower_bounds,
+        mu_hat_upper_bounds,
+        mu_true_list,
+        model_name,
+        empirical_coverage,
+        confidence_level,
+        output_dir,
+    ):
+        assert mu_hat_values == [1.0]
+        assert mu_hat_lower_bounds == [0.8]
+        assert mu_hat_upper_bounds == [1.2]
+        assert mu_true_list == [1.0]
+        assert model_name == "GLM [MLE-wald]"
+        assert empirical_coverage == 1.0
+        assert confidence_level == pytest.approx(math.erf(1.0 / math.sqrt(2.0)))
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "test_CI_plots-1_GLM [MLE-wald].png").write_text("plot")
+
+    monkeypatch.setattr(
+        module,
+        "plot_confidence_intervals",
+        fake_plot_confidence_intervals,
+    )
+
+    module.main()
+
+    coverage_path = stats_dir / "test_coverage.csv"
+    experiment_metrics_path = stats_dir / "test_experiment_metrics.csv"
+    performance_summary_path = stats_dir / "test_performance_summary.csv"
+    assert coverage_path.exists()
+    assert experiment_metrics_path.exists()
+    assert performance_summary_path.exists()
+    assert (plots_dir / "test_CI_plots-1_GLM [MLE-wald].png").exists()
+
+    with coverage_path.open(newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 1
+    assert rows[0]["model"] == "GLM"
+    assert rows[0]["mu_hat_mode"] == "mle"
+    assert rows[0]["mle_kind"] == "wald"
+    assert float(rows[0]["empirical_coverage"]) == 1.0
+
+    with experiment_metrics_path.open(newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 1
+    assert rows[0]["model"] == "GLM"
+    assert rows[0]["mle_kind"] == "wald"
+    assert rows[0]["n_obs"] == "1"
+    assert rows[0]["n_pred"] == "1"
+    assert float(rows[0]["mu_hat"]) == 1.0
+    assert float(rows[0]["mu_hat_lower"]) == 0.8
+    assert float(rows[0]["mu_hat_upper"]) == 1.2
+
+    with performance_summary_path.open(newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 1
+    assert rows[0]["model"] == "GLM"
+    assert rows[0]["mu_hat_mode"] == "mle"
+    assert rows[0]["mle_kind"] == "wald"
+    assert rows[0]["n_test_blocks"] == "1"
+    assert float(rows[0]["accuracy_mean"]) == 1.0
 
 
 def test_higgs_load_test_supports_automatic_and_explicit_offsets(tmp_path, monkeypatch):
@@ -903,7 +1077,7 @@ def test_higgs_load_test_supports_automatic_and_explicit_offsets(tmp_path, monke
         mu=1.0,
         seed=18,
         threshold=0.5,
-        mu_hat_mode="corrected",
+        mu_hat_mode="mle",
         interval_mode="symmetric",
         nonconf_target="mu_hat",
         output_dir="unused",

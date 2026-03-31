@@ -20,7 +20,7 @@ class PipelineConfig:
     mu: float = 1.0
     seed: int = 18
     threshold: float = 0.5
-    mu_hat_mode: str = "corrected"  # "raw" or "corrected"
+    mu_hat_mode: str = "mle"  # "raw" or "mle"
     interval_mode: str = "symmetric"  # "symmetric" or "free_form"
     nonconf_target: str = "mu_hat"  # "mu_hat" or "n_pred"
     output_dir: str = "results"
@@ -56,7 +56,7 @@ class PipelineConfig:
     def pred_formula(self) -> str:
         if self.mu_hat_mode == "raw":
             return r"$\hat{\mu} = \frac{n_{pred}}{\gamma^*_{true}}$"
-        if self.mu_hat_mode == "corrected":
+        if self.mu_hat_mode == "mle":
             return (
                 r"$\hat{\mu} = \frac{n_{pred} - \epsilon_{bkg}\beta^*_{true}}"
                 r"{\epsilon_{sig}\gamma^*_{true}}$"
@@ -125,7 +125,7 @@ def load_config(path: str | Path) -> PipelineConfig:
     with open(path) as fh:
         raw = yaml.safe_load(fh)
 
-    _validate_choice(raw, "mu_hat_mode", ("raw", "corrected"))
+    _validate_choice(raw, "mu_hat_mode", ("raw", "mle"))
     _validate_choice(raw, "interval_mode", ("symmetric", "free_form"))
     _resolve_confidence_config(raw)
 
