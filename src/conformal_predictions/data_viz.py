@@ -22,14 +22,18 @@ def plot_mu_hat_distribution(
     """Plot mu_hat distributions."""
     output_dir.mkdir(parents=True, exist_ok=True)
     model_names = list(mu_hat.keys())
+    q_low = (1 - confidence_level) / 2
+    q_high = 1 - q_low
+    q_central = confidence_level
 
     for model_name in model_names:
         values = mu_hat[model_name]
         if len(values) == 0:
             continue
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.hist(values, bins=30, alpha=0.7, color="blue", density=True)
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.set_box_aspect(1)
+        ax.hist(values, bins=50, alpha=0.99, color="royalblue", density=True)
 
         if len(values) > 1:
             density = gaussian_kde(values)
@@ -42,7 +46,7 @@ def plot_mu_hat_distribution(
             color="green",
             linestyle="--",
             linewidth=2,
-            label=f"q_low: {s['quantile_lower']:.3f}",
+            label=f"q{q_low*100:.2f}: {s['quantile_lower']:.3f}",
         )
         ax.axvline(
             s["mu_median"],
@@ -63,14 +67,14 @@ def plot_mu_hat_distribution(
             color="tab:cyan",
             linestyle="--",
             linewidth=2,
-            label=f"q_central: {s['central_quantile']:.3f}",
+            label=f"q{q_central*100:.2f}: {s['central_quantile']:.3f}",
         )
         ax.axvline(
             s["quantile_upper"],
             color="purple",
             linestyle="--",
             linewidth=2,
-            label=f"q_high: {s['quantile_upper']:.3f}",
+            label=f"q{q_high*100:.2f}: {s['quantile_upper']:.3f}",
         )
         ax.axvline(
             s["map"],
@@ -108,10 +112,11 @@ def plot_nonconformity_scores(
     model_names = list(nonconf_scores.keys())
 
     for model_name in model_names:
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(6, 6))
+        ax.set_box_aspect(1)
         scores = nonconf_scores[model_name]
 
-        ax.hist(scores, bins=30, alpha=0.7, color="blue", density=True)
+        ax.hist(scores, bins=50, alpha=0.99, color="royalblue", density=True)
 
         if len(scores) > 1:
             density = gaussian_kde(scores)
@@ -137,14 +142,14 @@ def plot_nonconformity_scores(
         if len(model_names) == 1:
             axs = [axs]
 
-        colors = ["blue", "green", "red"]
+        colors = ["#4472C4", "#59A14F", "#E15759"]
         for i, model_name in enumerate(model_names):
             scores = nonconf_scores[model_name]
             bin_width = 1
             axs[i].hist(
                 scores,
                 bins=np.arange(min(scores), max(scores) + bin_width, bin_width),
-                alpha=0.7,
+                alpha=0.99,
                 color=colors[i % len(colors)],
                 density=True,
             )
