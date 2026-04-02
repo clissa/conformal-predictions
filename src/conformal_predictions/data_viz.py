@@ -31,9 +31,9 @@ def plot_mu_hat_distribution(
         if len(values) == 0:
             continue
 
-        fig, ax = plt.subplots(figsize=(6, 6))
-        ax.set_box_aspect(1)
-        ax.hist(values, bins=50, alpha=0.99, color="royalblue", density=True)
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        ax.hist(values, bins=50, alpha=0.99, color="#1B9E77", density=True)
 
         if len(values) > 1:
             density = gaussian_kde(values)
@@ -112,11 +112,11 @@ def plot_nonconformity_scores(
     model_names = list(nonconf_scores.keys())
 
     for model_name in model_names:
-        fig, ax = plt.subplots(figsize=(6, 6))
-        ax.set_box_aspect(1)
+        fig, ax = plt.subplots(figsize=(10, 6))
+
         scores = nonconf_scores[model_name]
 
-        ax.hist(scores, bins=50, alpha=0.99, color="royalblue", density=True)
+        ax.hist(scores, bins=50, alpha=0.99, color="#1B9E77", density=True)
 
         if len(scores) > 1:
             density = gaussian_kde(scores)
@@ -142,7 +142,7 @@ def plot_nonconformity_scores(
         if len(model_names) == 1:
             axs = [axs]
 
-        colors = ["#4472C4", "#59A14F", "#E15759"]
+        colors = ["#4472C4", "#1B9E77", "#F5B54B"]
         for i, model_name in enumerate(model_names):
             scores = nonconf_scores[model_name]
             bin_width = 1
@@ -183,7 +183,7 @@ def plot_CI(
     ax: plt.Axes,
 ) -> plt.Axes:
     """Plot a single confidence interval on the given Axes."""
-    fontsize = 11
+    fontsize = 14
 
     TRUE_COLOR = "#4E79A7"  # desaturated blue
     CORRECT_COLOR = "#59A14F"  # green (Tableau safe)
@@ -207,7 +207,7 @@ def plot_CI(
         mu_hat,
         y_coord + 0.5,
         f"$\hat{{\mu}}={mu_hat:.2f}$",
-        ha="center",
+        ha="right",
         va="center",
         fontsize=fontsize,
         color=pred_color,
@@ -216,10 +216,10 @@ def plot_CI(
     ax.plot(mu_hat_lower, y_coord, "|", color=pred_color, linewidth=5, markersize=12)
     ax.plot(mu_hat_upper, y_coord, "|", color=pred_color, linewidth=5, markersize=12)
     ax.text(
-        mu_hat_lower,
+        mu_hat_upper,
         y_coord + 0.5,
         f"CI: [{mu_hat_lower:.2f}, {mu_hat_upper:.2f}]",
-        ha="left",
+        ha="right",
         va="center",
         fontsize=fontsize,
         color=pred_color,
@@ -258,7 +258,7 @@ def plot_confidence_intervals(
     _experiment_idxs = range(len(mu_hat_values))
 
     n_plots = 5
-    n_CI_per_plot = min(10, len(mu_hat_values))
+    n_CI_per_plot = min(4, len(mu_hat_values))
     CI_y_coords = LINE_SPACING * np.arange(n_CI_per_plot)
     for plot_id in range(1, n_plots + 1):
         if len(_experiment_idxs) == 0:
@@ -295,7 +295,7 @@ def plot_confidence_intervals(
         ].tolist()
 
         # create plot with proper spacing and loop through CIs
-        fig, ax = plt.subplots(figsize=(12, n_CI_per_plot * LINE_SPACING / 2 + PAD))
+        fig, ax = plt.subplots(figsize=(10, n_CI_per_plot * LINE_SPACING / 2 + PAD))
         for CI_y, mu_hat, mu_hat_lower, mu_hat_upper, mu_true in zip(
             CI_y_coords,
             mu_hat_values_to_plot,
@@ -316,7 +316,7 @@ def plot_confidence_intervals(
             transform=ax.transAxes,
             ha="right",
             va="top",
-            fontsize=12,
+            fontsize=14,
             bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
         )
 
