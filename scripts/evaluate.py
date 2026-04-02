@@ -23,6 +23,7 @@ from conformal_predictions.evaluation import (
     compute_empirical_coverage,
     inference_on_test_set,
 )
+from conformal_predictions.logging_utils import configure_script_logging
 from conformal_predictions.models import load_model
 from conformal_predictions.preprocessing import load_scaler
 from conformal_predictions.reference import load_efficiencies
@@ -254,8 +255,9 @@ def _build_performance_summary_rows(
 
 def main() -> None:
     args = _parse_args()
-    config = load_config(args.config)
     model_name = _MODEL_CLI_MAP[args.model]
+    configure_script_logging(args.config, model_name, __file__)
+    config = load_config(args.config)
 
     artifacts_dir = Path("results") / config.output_dir / "artifacts"
     plots_dir = config.plots_dir / model_name

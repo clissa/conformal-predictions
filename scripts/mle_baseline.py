@@ -26,6 +26,7 @@ from conformal_predictions.data.higgs import load_test as higgs_load_test
 from conformal_predictions.data.toy import list_split_files, load_pseudo_experiment
 from conformal_predictions.data_viz import plot_confidence_intervals
 from conformal_predictions.evaluation import compute_empirical_coverage
+from conformal_predictions.logging_utils import configure_script_logging
 from conformal_predictions.mle import compute_mle_interval, compute_mle_mu_hat
 from conformal_predictions.models import load_model
 from conformal_predictions.preprocessing import load_scaler
@@ -255,8 +256,9 @@ def _build_performance_summary_row(
 
 def main() -> None:
     args = _parse_args()
-    config = load_config(args.config)
     model_name = _MODEL_CLI_MAP[args.model]
+    configure_script_logging(args.config, model_name, __file__)
+    config = load_config(args.config)
 
     artifacts_dir = Path("results") / config.output_dir / "artifacts"
     mle_output_root = _build_mle_output_root(config)

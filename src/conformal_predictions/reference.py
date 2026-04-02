@@ -83,14 +83,22 @@ def save_efficiencies(
     efficiencies: Dict[str, Tuple[float, float]],
     output_dir: Path,
 ) -> Path:
-    """Save efficiencies dict to a JSON file and return its path."""
+    """Save efficiencies to JSON, merging with any existing entries."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / "reference_efficiencies.json"
+
     serializable = {
         name: {"eps_signal": eps_s, "eps_background": eps_b}
         for name, (eps_s, eps_b) in efficiencies.items()
     }
+
+    if path.exists():
+        with open(path) as fh:
+            existing = json.load(fh)
+        existing.update(serializable)
+        serializable = existing
+
     with open(path, "w") as fh:
         json.dump(serializable, fh, indent=2)
     return path

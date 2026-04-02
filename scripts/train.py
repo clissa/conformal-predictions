@@ -17,6 +17,7 @@ from conformal_predictions.config import PipelineConfig, load_config
 from conformal_predictions.data.higgs import load_trainval as higgs_load_trainval
 from conformal_predictions.data.toy import list_split_files, load_pseudo_experiment
 from conformal_predictions.evaluation import evaluate_models, get_events_count
+from conformal_predictions.logging_utils import configure_script_logging
 from conformal_predictions.models import build_models, fit_models, save_models
 from conformal_predictions.preprocessing import fit_scaler, save_scaler
 from conformal_predictions.reference import (
@@ -111,8 +112,9 @@ def _load_higgs_data(config: PipelineConfig):
 
 def main() -> None:
     args = _parse_args()
-    config = load_config(args.config)
     model_name = _MODEL_CLI_MAP[args.model]
+    configure_script_logging(args.config, model_name, __file__)
+    config = load_config(args.config)
 
     artifacts_dir = Path("results") / config.output_dir / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)

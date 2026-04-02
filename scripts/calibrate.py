@@ -29,6 +29,7 @@ from conformal_predictions.data_viz import (
     plot_mu_hat_distribution,
     plot_nonconformity_scores,
 )
+from conformal_predictions.logging_utils import configure_script_logging
 from conformal_predictions.models import load_model
 from conformal_predictions.preprocessing import load_scaler
 from conformal_predictions.reference import load_efficiencies
@@ -108,8 +109,9 @@ def _load_higgs_calib(
 
 def main() -> None:
     args = _parse_args()
-    config = load_config(args.config)
     model_name = _MODEL_CLI_MAP[args.model]
+    configure_script_logging(args.config, model_name, __file__)
+    config = load_config(args.config)
 
     artifacts_dir = Path("results") / config.output_dir / "artifacts"
     plots_dir = config.plots_dir / model_name
